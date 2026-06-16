@@ -712,6 +712,9 @@ function BudgetTab({ data, saveData }) {
 function ScadenzeTab({ data, saveData }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1' });
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '' });
+  const [editScope, setEditScope] = useState('singola'); // 'singola' | 'gruppo'
 
   function add() {
     if (!form.nome || !form.date) return;
@@ -754,6 +757,42 @@ function ScadenzeTab({ data, saveData }) {
     saveData({ scadenze: [...tutte, ...finte] });
   }
 
+  function startEdit(s) {
+    setEditId(s.id);
+    setEditForm({ nome: s.nome, amount: s.amount || '', date: s.date });
+    setEditScope('singola');
+  }
+  function cancelEdit() {
+    setEditId(null);
+  }
+  function saveEdit(s) {
+    if (!editForm.nome) return;
+    const gruppoKey = s.gruppoId || s.id; // id del gruppo "padre"
+    if (editScope === 'gruppo' && s.ricorrente) {
+      // Applica nome + importo a tutte le occorrenze future non pagate dello stesso gruppo
+      // (la data resta individuale per ciascuna rata, non viene toccata)
+      saveData({
+        scadenze: (data.scadenze || []).map(item => {
+          const stessoGruppo = item.id === gruppoKey || item.gruppoId === gruppoKey;
+          if (stessoGruppo && !item.pagato) {
+            return { ...item, nome: editForm.nome, amount: Number(editForm.amount) };
+          }
+          return item;
+        })
+      });
+    } else {
+      // Solo questa singola rata
+      saveData({
+        scadenze: (data.scadenze || []).map(item =>
+          item.id === s.id
+            ? { ...item, nome: editForm.nome, amount: Number(editForm.amount), date: editForm.date }
+            : item
+        )
+      });
+    }
+    setEditId(null);
+  }
+
   const sorted = [...(data.scadenze || [])].sort((a, b) => a.date.localeCompare(b.date));
   const daPagare = sorted.filter(s => !s.pagato);
   const pagate = sorted.filter(s => s.pagato);
@@ -765,6 +804,15 @@ function ScadenzeTab({ data, saveData }) {
     return '🔄 Ricorrente';
   }
 
+  // Stato unificato: testo + colore del pulsante, in base a pagato/scadenza
+  function statoBtn(s) {
+    if (s.pagato) return { label: '✓ Pagata', bg: 'var(--green)', border: 'var(--green)', color: '#fff' };
+    const col = scadenzaColor(s.date); // 'rosso' | 'arancio' | 'verde'
+    if (col === 'rosso') return { label: '⚠ Scaduta', bg: 'var(--red)', border: 'var(--red)', color: '#fff' };
+    if (col === 'arancio') return { label: 'Da pagare', bg: 'var(--orange)', border: 'var(--orange)', color: '#fff' };
+    return { label: 'Programmata', bg: 'var(--surface2)', border: 'var(--border2)', color: 'var(--text2)' };
+  }
+
   return (
     <div className="section active">
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
@@ -773,9 +821,10 @@ function ScadenzeTab({ data, saveData }) {
       </div>
 
       <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',lineHeight:'1.5'}}>
-        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span className="scad-dot rosso" style={{display:'inline-block'}}></span> scaduta</span>
-        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span className="scad-dot arancio" style={{display:'inline-block'}}></span> entro 5 giorni</span>
-        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span className="scad-dot verde" style={{display:'inline-block'}}></span> oltre 5 giorni</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--red)'}}></span> scaduta</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--orange)'}}></span> da pagare (entro 5 giorni)</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--surface2)',border:'1px solid var(--border2)'}}></span> programmata</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--green)'}}></span> pagata</span>
       </div>
 
       {show && (
@@ -829,34 +878,105 @@ function ScadenzeTab({ data, saveData }) {
 
       {daPagare.length === 0 && pagate.length === 0 && <div className="empty">Nessuna scadenza</div>}
 
-      {daPagare.map(s => (
-        <div className="scad-item" key={s.id}>
-          <div className={`scad-dot ${scadenzaColor(s.date)}`}></div>
-          <div className="scad-info">
-            <div className="scad-name">{s.nome} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
-            <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
+      {daPagare.map(s => {
+        const st = statoBtn(s);
+        return (
+        <div key={s.id}>
+          <div className="scad-item">
+            <div className="scad-info">
+              <div className="scad-name">{s.nome} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
+              <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
+            </div>
+            <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+            <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s.id)}>{st.label}</button>
+            <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
+            <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
           </div>
-          <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-          <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={() => togglePagato(s.id)}>✓ Pagato</button>
-          <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
+          {editId === s.id && (
+            <div className="card" style={{background:'var(--accent-light)',marginTop:'-4px',marginBottom:'10px'}}>
+              <div className="form-row">
+                <div className="form-group" style={{flex:2}}>
+                  <label>Nome</label>
+                  <input type="text" value={editForm.nome} onChange={e => setEditForm(f => ({...f, nome: e.target.value}))} />
+                </div>
+                <div className="form-group">
+                  <label>Importo €</label>
+                  <input type="number" step="0.01" min="0" value={editForm.amount} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))} />
+                </div>
+              </div>
+              {editScope === 'singola' && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Data</label>
+                    <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
+                  </div>
+                </div>
+              )}
+              {s.ricorrente && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Applica a</label>
+                    <select value={editScope} onChange={e => setEditScope(e.target.value)}>
+                      <option value="singola">Solo questa rata</option>
+                      <option value="gruppo">Questa e tutte le rate future non pagate</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div style={{display:'flex',gap:'8px'}}>
+                <button className="btn primary" onClick={() => saveEdit(s)}>💾 Salva modifica</button>
+                <button className="btn" onClick={cancelEdit}>✕ Annulla</button>
+              </div>
+            </div>
+          )}
         </div>
-      ))}
+        );
+      })}
 
       {pagate.length > 0 && (
         <div style={{marginTop:'16px'}}>
           <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'8px'}}>✓ Pagate</div>
-          {pagate.map(s => (
-            <div className="scad-item pagato" key={s.id}>
-              <div className={`scad-dot ${scadenzaColor(s.date)}`}></div>
-              <div className="scad-info">
-                <div className="scad-name">{s.nome}</div>
-                <div className="scad-date">{s.date}</div>
+          {pagate.map(s => {
+            const st = statoBtn(s);
+            return (
+            <div key={s.id}>
+              <div className="scad-item pagato">
+                <div className="scad-info">
+                  <div className="scad-name">{s.nome}</div>
+                  <div className="scad-date">{s.date}</div>
+                </div>
+                <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+                <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={() => togglePagato(s.id)}>↩️ Riapri</button>
+                <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
+                <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
               </div>
-              <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-              <button className="btn small" onClick={() => togglePagato(s.id)}>↩️ Riapri</button>
-              <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
+              {editId === s.id && (
+                <div className="card" style={{background:'var(--accent-light)',marginTop:'-4px',marginBottom:'10px'}}>
+                  <div className="form-row">
+                    <div className="form-group" style={{flex:2}}>
+                      <label>Nome</label>
+                      <input type="text" value={editForm.nome} onChange={e => setEditForm(f => ({...f, nome: e.target.value}))} />
+                    </div>
+                    <div className="form-group">
+                      <label>Importo €</label>
+                      <input type="number" step="0.01" min="0" value={editForm.amount} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))} />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Data</label>
+                      <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:'8px'}}>
+                    <button className="btn primary" onClick={() => saveEdit(s)}>💾 Salva modifica</button>
+                    <button className="btn" onClick={cancelEdit}>✕ Annulla</button>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
