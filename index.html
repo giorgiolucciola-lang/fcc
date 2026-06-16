@@ -11,147 +11,258 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
 :root {
-  --bg: #f8f5fc; --surface: #ffffff; --surface2: #f2edf8;
-  --border: #e2d9f0; --border2: #c8b8e0;
-  --accent: #9B59B6; --accent-light: #f0e8f8; --accent-dark: #7d3f9e;
-  --text: #1a1520; --text2: #6a5878; --text3: #a898b8;
-  --green: #27ae60; --green-bg: #eafaf1; --green-border: #a9dfbf;
-  --red: #c0392b; --red-bg: #fdf0ee; --red-border: #e8b0a8;
-  --orange: #e67e22; --orange-bg: #fef5ec;
-  --radius: 10px; --shadow: 0 2px 8px rgba(155,89,182,0.08);
+  --bg: #f8f5fc;
+  --surface: #ffffff;
+  --surface2: #f2edf8;
+  --border: #e2d9f0;
+  --border2: #c8b8e0;
+  --accent: #9B59B6;
+  --accent-light: #f0e8f8;
+  --accent-dark: #7d3f9e;
+  --text: #1a1520;
+  --text2: #6a5878;
+  --text3: #a898b8;
+  --green: #27ae60;
+  --green-bg: #eafaf1;
+  --green-border: #a9dfbf;
+  --red: #c0392b;
+  --red-bg: #fdf0ee;
+  --red-border: #e8b0a8;
+  --orange: #e67e22;
+  --orange-bg: #fef5ec;
+  --radius: 10px;
+  --shadow: 0 2px 8px rgba(155,89,182,0.08);
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-nav{background:var(--accent);padding:0;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(155,89,182,0.3)}
-.nav-top{display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
-.nav-title{color:#fff;font-size:17px;font-weight:700;letter-spacing:0.3px}
-.nav-user{color:rgba(255,255,255,0.85);font-size:13px;display:flex;align-items:center;gap:8px}
-.nav-tabs{display:flex;overflow-x:auto;padding:0 8px 0;gap:2px;scrollbar-width:none}
-.nav-tabs::-webkit-scrollbar{display:none}
-.tab-btn{padding:9px 14px;border:none;background:transparent;color:rgba(255,255,255,0.7);font-size:13px;font-weight:500;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:all 0.2s;flex-shrink:0}
-.tab-btn:hover{color:#fff}
-.tab-btn.active{color:#fff;border-bottom-color:#fff}
-.sync-btn{padding:5px 11px;border-radius:20px;border:1px solid rgba(255,255,255,0.5);background:transparent;color:#fff;font-size:12px;cursor:pointer;transition:all 0.2s}
-.sync-btn:hover{background:rgba(255,255,255,0.15)}
-.sync-btn.syncing{opacity:0.6}
+/* NAV */
+nav {
+  background: var(--accent);
+  padding: 0;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(155,89,182,0.3);
+}
+.nav-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+}
+.nav-title { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
+.nav-user { color: rgba(255,255,255,0.85); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.nav-tabs {
+  display: flex; overflow-x: auto;
+  padding: 0 8px 0;
+  gap: 2px;
+  scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  padding: 9px 14px; border: none; background: transparent;
+  color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 500;
+  cursor: pointer; border-bottom: 3px solid transparent;
+  white-space: nowrap; transition: all 0.2s; flex-shrink: 0;
+}
+.tab-btn:hover { color: #fff; }
+.tab-btn.active { color: #fff; border-bottom-color: #fff; }
 
-.section{display:none;padding:16px;max-width:700px;margin:0 auto}
-.section.active{display:block}
+/* SYNC BTN */
+.sync-btn {
+  padding: 5px 11px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.5);
+  background: transparent; color: #fff;
+  font-size: 12px; cursor: pointer; transition: all 0.2s;
+}
+.sync-btn:hover { background: rgba(255,255,255,0.15); }
+.sync-btn.syncing { opacity: 0.6; }
 
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
-.card-title{font-size:15px;font-weight:600;margin-bottom:12px;color:var(--text)}
+/* LAYOUT */
+.section { display: none; padding: 16px; max-width: 700px; margin: 0 auto; }
+.section.active { display: block; }
 
-/* FORM — campi bianchi */
-.form-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.form-row label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);display:block;margin-bottom:4px}
-.form-group{display:flex;flex-direction:column;flex:1;min-width:100px}
-input[type=text],input[type=number],input[type=date],select,textarea{
-  padding:9px 12px;background:#ffffff;border:1px solid var(--border2);border-radius:8px;
-  color:var(--text);font-size:15px;font-family:inherit;outline:none;width:100%;transition:border-color 0.2s,box-shadow 0.2s}
-input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(155,89,182,0.12)}
+/* CARDS */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px; margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
 
-.btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:14px;font-weight:500;cursor:pointer;transition:all 0.15s;white-space:nowrap}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.btn.primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
-.btn.danger{border-color:var(--red-border);color:var(--red)}
-.btn.danger:hover{background:var(--red-bg)}
-.btn.small{padding:4px 10px;font-size:12px}
+/* FORM ELEMENTS */
+.form-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.form-row label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); display: block; margin-bottom: 4px; }
+.form-group { display: flex; flex-direction: column; flex: 1; min-width: 100px; }
+input[type=text], input[type=number], input[type=date], select, textarea {
+  padding: 9px 12px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 15px; font-family: inherit;
+  outline: none; width: 100%; transition: border-color 0.2s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); background: #fff; }
 
-.budget-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-.month-nav{display:flex;align-items:center;gap:8px}
-.month-nav button{background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:16px;color:var(--text2)}
-.month-nav button:hover{border-color:var(--accent);color:var(--accent)}
-.month-label{font-size:16px;font-weight:600;min-width:140px;text-align:center}
+/* BUTTONS */
+.btn {
+  padding: 8px 16px; border-radius: 8px;
+  border: 1px solid var(--border2); background: var(--surface);
+  color: var(--text); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn.danger { border-color: var(--red-border); color: var(--red); }
+.btn.danger:hover { background: var(--red-bg); }
+.btn.small { padding: 4px 10px; font-size: 12px; }
 
-.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
-.summary-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 12px;text-align:center;box-shadow:var(--shadow)}
-.summary-card .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:6px}
-.summary-card .amount{font-size:20px;font-weight:700}
-.summary-card.entrate .amount{color:var(--green)}
-.summary-card.uscite .amount{color:var(--red)}
-.summary-card.saldo .amount{color:var(--accent)}
+/* BUDGET TAB */
+.budget-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+}
+.month-nav { display: flex; align-items: center; gap: 8px; }
+.month-nav button { background: none; border: 1px solid var(--border2); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 16px; color: var(--text2); }
+.month-nav button:hover { border-color: var(--accent); color: var(--accent); }
+.month-label { font-size: 16px; font-weight: 600; min-width: 140px; text-align: center; }
 
-.day-group{margin-bottom:18px}
-.day-header{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--accent);color:#fff;border-radius:10px;margin-bottom:8px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}
-.day-header .day-total{margin-left:auto;font-size:13px;font-weight:700;opacity:0.9}
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.summary-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 12px; text-align: center;
+  box-shadow: var(--shadow);
+}
+.summary-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-bottom: 6px; }
+.summary-card .amount { font-size: 20px; font-weight: 700; }
+.summary-card.entrate .amount { color: var(--green); }
+.summary-card.uscite .amount { color: var(--red); }
+.summary-card.saldo .amount { color: var(--accent); }
 
-.spesa-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:14px}
-.spesa-item.editing{flex-wrap:wrap;background:var(--accent-light);border-color:var(--accent);align-items:flex-start}
-.spesa-cat{font-size:11px;color:var(--text3)}
-.spesa-desc{flex:1;font-weight:500}
-.spesa-amount{font-weight:700;color:var(--red);white-space:nowrap}
-.spesa-delete{background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 4px;border-radius:4px}
-.spesa-delete:hover{color:var(--red);background:var(--red-bg)}
-.spesa-edit{background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;padding:2px 4px;border-radius:4px}
-.spesa-edit:hover{color:var(--accent);background:var(--accent-light)}
+/* SPESE per giorno */
+.day-group { margin-bottom: 18px; }
+.day-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  font-size: 13px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.day-header .day-total {
+  margin-left: auto;
+  font-size: 13px; font-weight: 700;
+  opacity: 0.9;
+}
+.spesa-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.spesa-cat { font-size: 11px; color: var(--text3); }
+.spesa-desc { flex: 1; font-weight: 500; }
+.spesa-amount { font-weight: 700; color: var(--red); white-space: nowrap; }
+.spesa-delete { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 16px; padding: 2px 4px; border-radius: 4px; }
+.spesa-delete:hover { color: var(--red); background: var(--red-bg); }
 
-.add-spesa-form{background:var(--accent-light);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:16px}
+.add-spesa-form {
+  background: var(--accent-light); border: 1px solid var(--border2);
+  border-radius: 12px; padding: 14px; margin-bottom: 16px;
+}
 
-/* AUTOCOMPLETE */
-.autocomplete-wrap{position:relative;width:100%}
-.autocomplete-list{position:absolute;top:100%;left:0;right:0;z-index:500;background:#fff;border:1px solid var(--border2);border-top:none;border-radius:0 0 8px 8px;max-height:180px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,0.12)}
-.autocomplete-item{padding:9px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border)}
-.autocomplete-item:last-child{border-bottom:none}
-.autocomplete-item:hover,.autocomplete-item.active{background:var(--accent-light);color:var(--accent)}
+/* SCADENZE */
+.scad-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+  margin-bottom: 8px;
+}
+.scad-item.pagato { opacity: 0.55; }
+.scad-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.scad-dot.verde { background: var(--green); }
+.scad-dot.arancio { background: var(--orange); }
+.scad-dot.rosso { background: var(--red); }
+.scad-info { flex: 1; }
+.scad-name { font-size: 14px; font-weight: 600; }
+.scad-date { font-size: 12px; color: var(--text3); }
+.scad-amount { font-weight: 700; font-size: 15px; }
 
-.edit-fields-row{display:flex;gap:6px;flex-wrap:wrap;flex:1}
-.edit-fields-row input,.edit-fields-row select{font-size:13px;padding:5px 8px}
-.edit-actions{display:flex;gap:4px;margin-top:6px;width:100%}
+/* SPESA (lista) */
+.spesa-lista-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  margin-bottom: 6px;
+}
+.spesa-lista-item.checked { opacity: 0.5; text-decoration: line-through; }
+.spesa-lista-item input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
 
-.scad-item{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
-.scad-item.pagato{opacity:0.55}
-.scad-item.editing{background:var(--accent-light);border-color:var(--accent);flex-wrap:wrap;align-items:flex-start}
-.scad-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.scad-dot.verde{background:var(--green)}
-.scad-dot.arancio{background:var(--orange)}
-.scad-dot.rosso{background:var(--red)}
-.scad-info{flex:1}
-.scad-name{font-size:14px;font-weight:600}
-.scad-date{font-size:12px;color:var(--text3)}
-.scad-amount{font-weight:700;font-size:15px}
+/* REPORT */
+.report-cat-bar { margin-bottom: 10px; }
+.report-cat-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.bar-bg { height: 8px; background: var(--border); border-radius: 4px; }
+.bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.5s; }
 
-.spesa-lista-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
-.spesa-lista-item.checked{opacity:0.5;text-decoration:line-through}
-.spesa-lista-item.editing{background:var(--accent-light);border-color:var(--accent);text-decoration:none;opacity:1;flex-wrap:wrap;align-items:flex-start}
-.spesa-lista-item input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:var(--accent)}
+/* IMPOSTAZIONI */
+.setting-section { margin-bottom: 20px; }
+.setting-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-bottom: 10px; }
+.cat-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 20px; padding: 4px 10px; margin: 4px;
+  font-size: 13px;
+}
+.cat-chip button { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 14px; line-height: 1; }
+.cat-chip button:hover { color: var(--red); }
 
-.report-cat-bar{margin-bottom:10px}
-.report-cat-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
-.bar-bg{height:8px;background:var(--border);border-radius:4px}
-.bar-fill{height:100%;background:var(--accent);border-radius:4px;transition:width 0.5s}
+/* LOGIN */
+.login-screen {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 80vh; gap: 20px; padding: 24px;
+  text-align: center;
+}
+.login-title { font-size: 28px; font-weight: 700; color: var(--accent); }
+.login-sub { color: var(--text2); font-size: 15px; max-width: 300px; }
+.btn-google {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 24px; border-radius: 10px;
+  border: 1px solid var(--border2); background: var(--surface);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  box-shadow: var(--shadow); transition: all 0.2s;
+}
+.btn-google:hover { box-shadow: 0 4px 16px rgba(155,89,182,0.15); border-color: var(--accent); }
 
-.setting-section{margin-bottom:20px}
-.setting-label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:10px}
-.cat-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;margin:4px;font-size:13px}
-.cat-chip button{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;line-height:1}
-.cat-chip button:hover{color:var(--red)}
+.empty { text-align: center; color: var(--text3); padding: 32px 16px; font-size: 14px; }
+.badge-entrata { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); border-radius: 5px; font-size: 11px; font-weight: 600; padding: 2px 6px; }
+.badge-uscita { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); border-radius: 5px; font-size: 11px; font-weight: 600; padding: 2px 6px; }
 
-.login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:20px;padding:24px;text-align:center}
-.login-title{font-size:28px;font-weight:700;color:var(--accent)}
-.login-sub{color:var(--text2);font-size:15px;max-width:300px}
-.btn-google{display:flex;align-items:center;gap:10px;padding:12px 24px;border-radius:10px;border:1px solid var(--border2);background:var(--surface);font-size:15px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);transition:all 0.2s}
-.btn-google:hover{box-shadow:0 4px 16px rgba(155,89,182,0.15);border-color:var(--accent)}
-
-.empty{text-align:center;color:var(--text3);padding:32px 16px;font-size:14px}
-
-.entrata-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;margin-bottom:6px}
-.entrata-item.editing{background:var(--accent-light);border-color:var(--accent);flex-wrap:wrap;align-items:flex-start}
-.entrata-item .spesa-desc{color:var(--green)}
-.entrata-item .spesa-amount{color:var(--green)}
+/* Entrate list */
+.entrata-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--green-bg);
+  border: 1px solid var(--green-border); border-radius: 8px;
+  margin-bottom: 6px;
+}
+.entrata-item .spesa-desc { color: var(--green); }
+.entrata-item .spesa-amount { color: var(--green); }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 
+// ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
+// ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
+// Le trovi su: console.firebase.google.com → Il tuo progetto → Impostazioni → Le tue app
 const firebaseConfig = {
   apiKey: "AIzaSyDWcRC7Zf8NX2OJU197UVvZ23Gy6_SWQtw",
   authDomain: "family-control-center-4ae38.firebaseapp.com",
@@ -160,89 +271,74 @@ const firebaseConfig = {
   messagingSenderId: "722999772560",
   appId: "1:722999772560:web:f06617ba41dee3f9ebdf15"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
 
+// ── UTILS ──────────────────────────────────────────────────────────────────────
 function localDateStr(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
-function formatEuro(n) { return '€ ' + Number(n||0).toFixed(2).replace('.',','); }
-function monthLabel(y,m) { return new Date(y,m-1,1).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); }
+function formatEuro(n) {
+  return '€ ' + Number(n || 0).toFixed(2).replace('.', ',');
+}
+function monthLabel(y, m) {
+  return new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+}
 function dayLabel(dateStr) {
-  const [y,m,d] = dateStr.split('-').map(Number);
-  const date = new Date(y,m-1,d);
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
   const today = new Date(); today.setHours(0,0,0,0);
-  const diff = Math.round((today-date)/86400000);
-  if(diff===0) return 'Oggi';
-  if(diff===1) return 'Ieri';
-  return date.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
-}
-function italianDate(dateStr) {
-  if(!dateStr) return '';
-  const [y,m,d] = dateStr.split('-').map(Number);
-  return new Date(y,m-1,d).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
+  const diff = Math.round((today - date) / 86400000);
+  if (diff === 0) return 'Oggi';
+  if (diff === 1) return 'Ieri';
+  return date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 function scadenzaColor(dateStr) {
-  const [y,m,d] = dateStr.split('-').map(Number);
-  const date = new Date(y,m-1,d);
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
   const today = new Date(); today.setHours(0,0,0,0);
-  const diff = Math.round((date-today)/86400000);
-  if(diff<0) return 'rosso';
-  if(diff<=5) return 'arancio';
+  const diff = Math.round((date - today) / 86400000);
+  if (diff < 0) return 'rosso';
+  if (diff <= 5) return 'arancio';
   return 'verde';
 }
-
-const DEFAULT_CATS = ['Casa','Cibo','Trasporti','Salute','Svago','Abbigliamento','Altro'];
-const DEFAULT_SPESA_CATS = ['Frutta e Verdura','Carne e Pesce','Latticini','Pane e Cereali','Bevande','Pulizia','Altro'];
-
-// ── AUTOCOMPLETE ───────────────────────────────────────────────────────────────
-function AutocompleteInput({ value, onChange, suggestions, placeholder, style, onKeyDown }) {
-  const [open, setOpen] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(-1);
-  const wrapRef = useRef(null);
-
-  const filtered = value.length >= 1
-    ? [...new Set(suggestions)].filter(s => s.toLowerCase().includes(value.toLowerCase()) && s.toLowerCase() !== value.toLowerCase()).slice(0,7)
-    : [];
-
-  useEffect(() => {
-    function h(e) { if(wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-
-  function handleKey(e) {
-    if(!open || filtered.length === 0) { if(onKeyDown) onKeyDown(e); return; }
-    if(e.key==='ArrowDown'){e.preventDefault();setActiveIdx(i=>Math.min(i+1,filtered.length-1));}
-    else if(e.key==='ArrowUp'){e.preventDefault();setActiveIdx(i=>Math.max(i-1,-1));}
-    else if(e.key==='Enter'&&activeIdx>=0){e.preventDefault();onChange(filtered[activeIdx]);setOpen(false);setActiveIdx(-1);}
-    else if(e.key==='Escape'){setOpen(false);setActiveIdx(-1);}
-    else{if(onKeyDown) onKeyDown(e);}
+function addMonthsToDateStr(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setMonth(date.getMonth() + n);
+  return localDateStr(date);
+}
+// Genera occorrenze future per una scadenza ricorrente (fissa mensile o periodica multi-mese)
+function generaOccorrenze(scadenza, count = 12) {
+  const occorrenze = [];
+  for (let i = 1; i <= count; i++) {
+    const intervallo = scadenza.tipoRicorrenza === 'fissa' ? 1 : Number(scadenza.intervalloMesi || 1);
+    occorrenze.push({
+      id: scadenza.id + i, // id derivato, univoco e stabile
+      nome: scadenza.nome,
+      amount: scadenza.amount,
+      date: addMonthsToDateStr(scadenza.date, intervallo * i),
+      ricorrente: true,
+      tipoRicorrenza: scadenza.tipoRicorrenza,
+      intervalloMesi: scadenza.intervalloMesi || null,
+      gruppoId: scadenza.id,
+      pagato: false,
+    });
   }
-
-  return (
-    <div className="autocomplete-wrap" ref={wrapRef} style={style}>
-      <input type="text" placeholder={placeholder} value={value}
-        onChange={e=>{onChange(e.target.value);setOpen(true);setActiveIdx(-1);}}
-        onFocus={()=>value.length>=1&&setOpen(true)}
-        onKeyDown={handleKey} />
-      {open && filtered.length > 0 && (
-        <div className="autocomplete-list">
-          {filtered.map((s,i)=>(
-            <div key={s} className={`autocomplete-item${i===activeIdx?' active':''}`}
-              onMouseDown={e=>{e.preventDefault();onChange(s);setOpen(false);setActiveIdx(-1);}}>
-              {s}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return occorrenze;
 }
 
-// ── APP ────────────────────────────────────────────────────────────────────────
+// ── DEFAULT DATA ───────────────────────────────────────────────────────────────
+const DEFAULT_CATS = ['Casa', 'Cibo', 'Trasporti', 'Salute', 'Svago', 'Abbigliamento', 'Altro'];
+const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'Pane e Cereali', 'Bevande', 'Pulizia', 'Altro'];
+
+// ── MAIN APP ───────────────────────────────────────────────────────────────────
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -251,48 +347,79 @@ function App() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    const t = setTimeout(()=>setLoading(false),6000);
-    const unsub = auth.onAuthStateChanged(u=>{clearTimeout(t);setUser(u||null);setLoading(false);},()=>{clearTimeout(t);setLoading(false);});
-    return ()=>{unsub();clearTimeout(t);};
+    const timeout = setTimeout(() => setLoading(false), 6000);
+    const unsub = auth.onAuthStateChanged(u => {
+      clearTimeout(timeout);
+      setUser(u || null);
+      setLoading(false);
+    }, () => {
+      clearTimeout(timeout);
+      setLoading(false);
+    });
+    return () => { unsub(); clearTimeout(timeout); };
   }, []);
 
   useEffect(() => {
-    if(!user) return;
+    if (!user) return;
     const ref = db.collection('users').doc(user.uid);
-    const unsub = ref.onSnapshot(snap=>{
-      if(snap.exists){setData(snap.data());}
-      else{
-        const init={spese:[],entrate:[],scadenze:[],listaSpesa:[],categorie:DEFAULT_CATS,categorieLista:DEFAULT_SPESA_CATS,budgetMensile:2000};
-        ref.set(init); setData(init);
+    const unsub = ref.onSnapshot(snap => {
+      if (snap.exists) {
+        setData(snap.data());
+      } else {
+        const init = {
+          spese: [],
+          entrate: [],
+          scadenze: [],
+          listaSpesa: [],
+          categorie: DEFAULT_CATS,
+          categorieLista: DEFAULT_SPESA_CATS,
+          budgetMensile: 2000,
+        };
+        ref.set(init);
+        setData(init);
       }
     });
     return unsub;
   }, [user]);
 
   async function saveData(newData) {
-    if(!user) return;
-    const merged = {...data,...newData};
-    setData(merged); setSyncing(true);
-    try { await db.collection('users').doc(user.uid).set(merged); } finally { setSyncing(false); }
+    if (!user) return;
+    const merged = { ...data, ...newData };
+    setData(merged);
+    setSyncing(true);
+    try {
+      await db.collection('users').doc(user.uid).set(merged);
+    } finally {
+      setSyncing(false);
+    }
   }
 
-  if(loading) return <div style={{textAlign:'center',padding:'60px',color:'var(--text3)'}}>Caricamento...</div>;
+  function login() { auth.signInWithPopup(provider); }
+  function logout() { auth.signOut(); setData(null); }
 
-  if(!user) return (
+  if (loading) return <div style={{textAlign:'center',padding:'60px',color:'var(--text3)'}}>Caricamento...</div>;
+
+  if (!user) return (
     <div className="login-screen">
       <div style={{fontSize:'48px'}}>💜</div>
       <div className="login-title">Family Control Center</div>
       <div className="login-sub">Accedi per gestire budget, spese, scadenze e lista della spesa</div>
-      <button className="btn-google" onClick={()=>auth.signInWithPopup(provider)}>
+      <button className="btn-google" onClick={login}>
         <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
         Accedi con Google
       </button>
     </div>
   );
 
-  if(!data) return <div style={{textAlign:'center',padding:'60px',color:'var(--text3)'}}>Caricamento dati...</div>;
+  if (!data && user) return <div style={{textAlign:'center',padding:'60px',color:'var(--text3)'}}>Caricamento dati...</div>;
 
-  const tabs=[{id:'budget',label:'💰 Budget'},{id:'scadenze',label:'📅 Scadenze'},{id:'spesa',label:'🛒 Spesa'},{id:'report',label:'📊 Report'},{id:'impostazioni',label:'⚙️ Impostazioni'}];
+  const tabs = [
+    { id: 'budget', label: '💰 Budget' },
+    { id: 'scadenze', label: '📅 Scadenze' },
+    { id: 'spesa', label: '🛒 Spesa' },
+    { id: 'report', label: '📊 Report' },
+    { id: 'impostazioni', label: '⚙️ Impostazioni' },
+  ];
 
   return (
     <div>
@@ -300,22 +427,26 @@ function App() {
         <div className="nav-top">
           <div className="nav-title">💜 Family CC</div>
           <div className="nav-user">
-            <button className={`sync-btn${syncing?' syncing':''}`} onClick={()=>{auth.signOut();setData(null);}}>
-              {syncing?'🔄 Sync...':'☁️ Esci'}
+            <span style={{display:'none',fontSize:'12px'}}>{user.displayName?.split(' ')[0]}</span>
+            <button className={`sync-btn${syncing?' syncing':''}`} onClick={logout}>
+              {syncing ? '🔄 Sync...' : '☁️ Esci'}
             </button>
           </div>
         </div>
         <div className="nav-tabs">
-          {tabs.map(t=>(
-            <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={()=>setTab(t.id)}>{t.label}</button>
+          {tabs.map(t => (
+            <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
           ))}
         </div>
       </nav>
-      {tab==='budget'&&<BudgetTab data={data} saveData={saveData}/>}
-      {tab==='scadenze'&&<ScadenzeTab data={data} saveData={saveData}/>}
-      {tab==='spesa'&&<SpesaTab data={data} saveData={saveData}/>}
-      {tab==='report'&&<ReportTab data={data}/>}
-      {tab==='impostazioni'&&<ImpostazioniTab data={data} saveData={saveData}/>}
+
+      {tab === 'budget' && <BudgetTab data={data} saveData={saveData} />}
+      {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} />}
+      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} />}
+      {tab === 'report' && <ReportTab data={data} />}
+      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} />}
     </div>
   );
 }
@@ -324,144 +455,224 @@ function App() {
 function BudgetTab({ data, saveData }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()+1);
+  const [month, setMonth] = useState(today.getMonth() + 1);
   const [showAddSpesa, setShowAddSpesa] = useState(false);
   const [showAddEntrata, setShowAddEntrata] = useState(false);
-  const [form, setForm] = useState({desc:'',amount:'',cat:'',subcat:'',subcatAltro:'',date:localDateStr()});
-  const [formE, setFormE] = useState({desc:'',amount:'',date:localDateStr()});
+  const [form, setForm] = useState({ desc: '', amount: '', cat: '', subcat: '', date: localDateStr() });
+  const [formE, setFormE] = useState({ desc: '', amount: '', date: localDateStr() });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
   const [newSubcatInline, setNewSubcatInline] = useState('');
   const [showNewSubcat, setShowNewSubcat] = useState(false);
-  const [editingSpesaId, setEditingSpesaId] = useState(null);
-  const [editSpesa, setEditSpesa] = useState({});
-  const [editingEntrataId, setEditingEntrataId] = useState(null);
-  const [editEntrata, setEditEntrata] = useState({});
 
-  function prevMonth(){if(month===1){setMonth(12);setYear(y=>y-1);}else setMonth(m=>m-1);}
-  function nextMonth(){if(month===12){setMonth(1);setYear(y=>y+1);}else setMonth(m=>m+1);}
-
-  const speseMese=(data.spese||[]).filter(s=>{const[sy,sm]=s.date.split('-').map(Number);return sy===year&&sm===month;});
-  const entrateMese=(data.entrate||[]).filter(e=>{const[ey,em]=e.date.split('-').map(Number);return ey===year&&em===month;});
-  const totSpese=speseMese.reduce((a,s)=>a+Number(s.amount),0);
-  const totEntrate=entrateMese.reduce((a,e)=>a+Number(e.amount),0);
-  const saldo=totEntrate-totSpese;
-
-  const spesePorGiorno={};
-  for(const s of speseMese){if(!spesePorGiorno[s.date])spesePorGiorno[s.date]=[];spesePorGiorno[s.date].push(s);}
-  const giorniOrdinati=Object.keys(spesePorGiorno).sort((a,b)=>b.localeCompare(a));
-  for(const g of giorniOrdinati) spesePorGiorno[g].sort((a,b)=>(b.id||0)-(a.id||0));
-
-  const descSuggerimenti=[...new Set((data.spese||[]).map(s=>s.desc).filter(Boolean))];
-  const descSuggerimentiE=[...new Set((data.entrate||[]).map(e=>e.desc).filter(Boolean))];
-  const subcatOptions=form.cat?((data.sottocategorie||{})[form.cat]||[]):[];
-
-  function addCatInline(){
-    if(!newCatInline.trim()) return;
-    saveData({categorie:[...(data.categorie||DEFAULT_CATS),newCatInline.trim()]});
-    setForm(f=>({...f,cat:newCatInline.trim()}));setNewCatInline('');setShowNewCat(false);
+  function addCatInline() {
+    if (!newCatInline.trim()) return;
+    const cats = [...(data.categorie || DEFAULT_CATS), newCatInline.trim()];
+    saveData({ categorie: cats });
+    setForm(f => ({ ...f, cat: newCatInline.trim() }));
+    setNewCatInline('');
+    setShowNewCat(false);
   }
-  function addSubcatInline(){
-    if(!newSubcatInline.trim()||!form.cat) return;
-    const sc={...(data.sottocategorie||{})};
-    if(!sc[form.cat]) sc[form.cat]=[];
-    sc[form.cat]=[...sc[form.cat],newSubcatInline.trim()];
-    saveData({sottocategorie:sc});
-    setForm(f=>({...f,subcat:newSubcatInline.trim(),subcatAltro:''}));
-    setNewSubcatInline('');setShowNewSubcat(false);
-  }
-  function addSpesa(){
-    if(!form.desc||!form.amount) return;
-    const subcatFinal=form.subcat==='__altro__'?(form.subcatAltro.trim()||''):(form.subcat||'');
-    saveData({spese:[...(data.spese||[]),{id:Date.now(),desc:form.desc,amount:Number(form.amount),cat:form.cat||'Altro',subcat:subcatFinal,date:form.date}]});
-    setForm({desc:'',amount:'',cat:'',subcat:'',subcatAltro:'',date:localDateStr()});
-    setShowAddSpesa(false);setShowNewCat(false);setShowNewSubcat(false);
-  }
-  function deleteSpesa(id){saveData({spese:(data.spese||[]).filter(s=>s.id!==id)});}
-  function startEditSpesa(s){setEditingSpesaId(s.id);setEditSpesa({desc:s.desc,amount:s.amount,cat:s.cat,subcat:s.subcat||'',date:s.date});}
-  function saveEditSpesa(id){saveData({spese:(data.spese||[]).map(s=>s.id===id?{...s,...editSpesa,amount:Number(editSpesa.amount)}:s)});setEditingSpesaId(null);}
 
-  function addEntrata(){
-    if(!formE.desc||!formE.amount) return;
-    saveData({entrate:[...(data.entrate||[]),{id:Date.now(),desc:formE.desc,amount:Number(formE.amount),date:formE.date}]});
-    setFormE({desc:'',amount:'',date:localDateStr()});setShowAddEntrata(false);
+  function addSubcatInline() {
+    if (!newSubcatInline.trim() || !form.cat) return;
+    const subcats = { ...(data.sottocategorie || {}) };
+    if (!subcats[form.cat]) subcats[form.cat] = [];
+    subcats[form.cat] = [...subcats[form.cat], newSubcatInline.trim()];
+    saveData({ sottocategorie: subcats });
+    setForm(f => ({ ...f, subcat: newSubcatInline.trim() }));
+    setNewSubcatInline('');
+    setShowNewSubcat(false);
   }
-  function deleteEntrata(id){saveData({entrate:(data.entrate||[]).filter(e=>e.id!==id)});}
-  function startEditEntrata(e){setEditingEntrataId(e.id);setEditEntrata({desc:e.desc,amount:e.amount,date:e.date});}
-  function saveEditEntrata(id){saveData({entrate:(data.entrate||[]).map(e=>e.id===id?{...e,...editEntrata,amount:Number(editEntrata.amount)}:e)});setEditingEntrataId(null);}
+
+  function prevMonth() {
+    if (month === 1) { setMonth(12); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (month === 12) { setMonth(1); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+  }
+
+  const speseMese = (data.spese || []).filter(s => {
+    const [sy, sm] = s.date.split('-').map(Number);
+    return sy === year && sm === month;
+  });
+  const entrateMese = (data.entrate || []).filter(e => {
+    const [ey, em] = e.date.split('-').map(Number);
+    return ey === year && em === month;
+  });
+
+  const totSpese = speseMese.reduce((a, s) => a + Number(s.amount), 0);
+  const totEntrate = entrateMese.reduce((a, e) => a + Number(e.amount), 0);
+  const scadenzeMese = (data.scadenze || []).filter(sc => {
+    const [scy, scm] = sc.date.split('-').map(Number);
+    return scy === year && scm === month;
+  });
+  const totScadenze = scadenzeMese.reduce((a, sc) => a + Number(sc.amount || 0), 0);
+  const saldo = totEntrate - totSpese - totScadenze;
+
+  // Raggruppa spese per giorno, ordine cronologico inverso (giorno più recente in cima)
+  const spesePorGiorno = {};
+  for (const s of speseMese) {
+    if (!spesePorGiorno[s.date]) spesePorGiorno[s.date] = [];
+    spesePorGiorno[s.date].push(s);
+  }
+  // Ordina le chiavi (giorni) dal più recente al più vecchio
+  const giorniOrdinati = Object.keys(spesePorGiorno).sort((a, b) => b.localeCompare(a));
+  // Ordina le spese dentro ogni giorno: più recente in cima (usa id/timestamp)
+  for (const g of giorniOrdinati) {
+    spesePorGiorno[g].sort((a, b) => (b.id || 0) - (a.id || 0));
+  }
+
+  function addSpesa() {
+    if (!form.desc || !form.amount) return;
+    const s = { id: Date.now(), desc: form.desc, amount: Number(form.amount), cat: form.cat || 'Altro', subcat: form.subcat || '', date: form.date };
+    saveData({ spese: [...(data.spese || []), s] });
+    setForm({ desc: '', amount: '', cat: '', subcat: '', date: localDateStr() });
+    setShowAddSpesa(false);
+  }
+  function deleteSpesa(id) {
+    saveData({ spese: (data.spese || []).filter(s => s.id !== id) });
+  }
+  function addEntrata() {
+    if (!formE.desc || !formE.amount) return;
+    const e = { id: Date.now(), desc: formE.desc, amount: Number(formE.amount), date: formE.date };
+    saveData({ entrate: [...(data.entrate || []), e] });
+    setFormE({ desc: '', amount: '', date: localDateStr() });
+    setShowAddEntrata(false);
+  }
+  function deleteEntrata(id) {
+    saveData({ entrate: (data.entrate || []).filter(e => e.id !== id) });
+  }
 
   return (
     <div className="section active">
       <div className="budget-header">
         <div className="month-nav">
           <button onClick={prevMonth}>‹</button>
-          <div className="month-label">{monthLabel(year,month)}</div>
+          <div className="month-label">{monthLabel(year, month)}</div>
           <button onClick={nextMonth}>›</button>
         </div>
       </div>
 
       <div className="summary-grid">
-        <div className="summary-card entrate"><div className="label">Entrate</div><div className="amount">{formatEuro(totEntrate)}</div></div>
-        <div className="summary-card uscite"><div className="label">Uscite</div><div className="amount">{formatEuro(totSpese)}</div></div>
-        <div className="summary-card saldo"><div className="label">Saldo</div><div className="amount" style={{color:saldo>=0?'var(--green)':'var(--red)'}}>{formatEuro(saldo)}</div></div>
+        <div className="summary-card entrate">
+          <div className="label">Entrate</div>
+          <div className="amount">{formatEuro(totEntrate)}</div>
+        </div>
+        <div className="summary-card uscite">
+          <div className="label">Uscite</div>
+          <div className="amount">{formatEuro(totSpese + totScadenze)}</div>
+        </div>
+        <div className="summary-card saldo">
+          <div className="label">Saldo</div>
+          <div className="amount" style={{color: saldo >= 0 ? 'var(--green)' : 'var(--red)'}}>{formatEuro(saldo)}</div>
+        </div>
+      </div>
+      {totScadenze > 0 && (
+        <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',marginTop:'-6px',textAlign:'center'}}>
+          di cui {formatEuro(totScadenze)} di scadenze in questo mese
+        </div>
+      )}
+
+      {/* ENTRATE */}
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+          <div className="card-title" style={{marginBottom:0}}>💚 Entrate</div>
+          <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={() => setShowAddEntrata(v => !v)}>
+            {showAddEntrata ? '✕ Annulla' : '+ Aggiungi'}
+          </button>
+        </div>
+
+        {showAddEntrata && (
+          <div className="add-spesa-form" style={{background:'var(--green-bg)',borderColor:'var(--green-border)'}}>
+            <div className="form-row">
+              <div className="form-group" style={{flex:2}}>
+                <label>Descrizione</label>
+                <input type="text" placeholder="Es. Stipendio" value={formE.desc} onChange={e => setFormE(f => ({...f, desc: e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label>Importo €</label>
+                <input type="number" placeholder="0.00" value={formE.amount} onChange={e => setFormE(f => ({...f, amount: e.target.value}))} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Data</label>
+                <input type="date" value={formE.date} onChange={e => setFormE(f => ({...f, date: e.target.value}))} />
+              </div>
+            </div>
+            <button className="btn primary" style={{background:'var(--green)',borderColor:'var(--green)'}} onClick={addEntrata}>💾 Salva entrata</button>
+          </div>
+        )}
+
+        {entrateMese.length === 0 && <div className="empty">Nessuna entrata questo mese</div>}
+        {entrateMese.slice().sort((a,b) => b.date.localeCompare(a.date)).map(e => (
+          <div className="entrata-item" key={e.id}>
+            <div style={{flex:1}}>
+              <div className="spesa-desc">{e.desc}</div>
+              <div className="spesa-cat">{e.date}</div>
+            </div>
+            <div className="spesa-amount">{formatEuro(e.amount)}</div>
+            <button className="spesa-delete" onClick={() => deleteEntrata(e.id)}>🗑</button>
+          </div>
+        ))}
       </div>
 
       {/* SPESE */}
       <div className="card">
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
           <div className="card-title" style={{marginBottom:0}}>💸 Spese</div>
-          <button className="btn primary small" onClick={()=>setShowAddSpesa(v=>!v)}>{showAddSpesa?'✕ Annulla':'+ Aggiungi'}</button>
+          <button className="btn primary small" onClick={() => setShowAddSpesa(v => !v)}>
+            {showAddSpesa ? '✕ Annulla' : '+ Aggiungi'}
+          </button>
         </div>
 
-        {showAddSpesa&&(
+        {showAddSpesa && (
           <div className="add-spesa-form">
             <div className="form-row">
               <div className="form-group" style={{flex:2}}>
                 <label>Descrizione</label>
-                <AutocompleteInput value={form.desc} onChange={v=>setForm(f=>({...f,desc:v}))} suggestions={descSuggerimenti} placeholder="Es. Supermercato" onKeyDown={e=>e.key==='Enter'&&addSpesa()} />
+                <input type="text" placeholder="Es. Supermercato" value={form.desc} onChange={e => setForm(f => ({...f, desc: e.target.value}))} />
               </div>
               <div className="form-group">
                 <label>Importo €</label>
-                <input type="number" placeholder="0.00" step="0.01" min="0" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} />
+                <input type="number" placeholder="0.00" step="0.01" min="0" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} />
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
                 <label>Categoria</label>
-                <select value={form.cat} onChange={e=>{setForm(f=>({...f,cat:e.target.value,subcat:'',subcatAltro:''}));setShowNewCat(false);}}>
+                <select value={form.cat} onChange={e => { setForm(f => ({...f, cat: e.target.value, subcat: ''})); setShowNewCat(false); }}>
                   <option value="">Seleziona...</option>
-                  {(data.categorie||DEFAULT_CATS).map(c=><option key={c}>{c}</option>)}
+                  {(data.categorie || DEFAULT_CATS).map(c => <option key={c}>{c}</option>)}
                 </select>
-                {!showNewCat&&<button type="button" onClick={()=>setShowNewCat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova categoria</button>}
-                {showNewCat&&<div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
-                  <input type="text" placeholder="Nome categoria" value={newCatInline} onChange={e=>setNewCatInline(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCatInline()} style={{fontSize:'13px',padding:'4px 8px'}}/>
+                {!showNewCat && <button type="button" onClick={() => setShowNewCat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova categoria</button>}
+                {showNewCat && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
+                  <input type="text" placeholder="Nome categoria" value={newCatInline} onChange={e => setNewCatInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addCatInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
                   <button type="button" className="btn primary small" onClick={addCatInline}>✓</button>
-                  <button type="button" className="btn small" onClick={()=>setShowNewCat(false)}>✕</button>
+                  <button type="button" className="btn small" onClick={() => setShowNewCat(false)}>✕</button>
                 </div>}
               </div>
               <div className="form-group">
                 <label>Data</label>
-                <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
+                <input type="date" value={form.date} onChange={e => setForm(f => ({...f, date: e.target.value}))} />
               </div>
             </div>
-            {form.cat&&(
+            {form.cat && (
               <div className="form-row">
                 <div className="form-group">
                   <label>Sottocategoria <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
-                  <select value={form.subcat} onChange={e=>setForm(f=>({...f,subcat:e.target.value,subcatAltro:''}))}>
+                  <select value={form.subcat} onChange={e => setForm(f => ({...f, subcat: e.target.value}))}>
                     <option value="">Nessuna</option>
-                    {subcatOptions.map(s=><option key={s}>{s}</option>)}
-                    <option value="__altro__">Altro (specifica sotto...)</option>
+                    {((data.sottocategorie || {})[form.cat] || []).map(s => <option key={s}>{s}</option>)}
                   </select>
-                  {form.subcat==='__altro__'&&(
-                    <input type="text" placeholder="Descrivi la sottocategoria..." value={form.subcatAltro}
-                      onChange={e=>setForm(f=>({...f,subcatAltro:e.target.value}))} style={{marginTop:'6px'}} autoFocus />
-                  )}
-                  {!showNewSubcat&&<button type="button" onClick={()=>setShowNewSubcat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Salva come nuova sottocategoria</button>}
-                  {showNewSubcat&&<div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
-                    <input type="text" placeholder="Nome sottocategoria" value={newSubcatInline} onChange={e=>setNewSubcatInline(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addSubcatInline()} style={{fontSize:'13px',padding:'4px 8px'}}/>
+                  {!showNewSubcat && <button type="button" onClick={() => setShowNewSubcat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova sottocategoria</button>}
+                  {showNewSubcat && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
+                    <input type="text" placeholder="Nome sottocategoria" value={newSubcatInline} onChange={e => setNewSubcatInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addSubcatInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
                     <button type="button" className="btn primary small" onClick={addSubcatInline}>✓</button>
-                    <button type="button" className="btn small" onClick={()=>setShowNewSubcat(false)}>✕</button>
+                    <button type="button" className="btn small" onClick={() => setShowNewSubcat(false)}>✕</button>
                   </div>}
                 </div>
               </div>
@@ -470,104 +681,27 @@ function BudgetTab({ data, saveData }) {
           </div>
         )}
 
-        {giorniOrdinati.length===0&&<div className="empty">Nessuna spesa questo mese</div>}
+        {giorniOrdinati.length === 0 && <div className="empty">Nessuna spesa questo mese</div>}
 
-        {giorniOrdinati.map(giorno=>(
+        {giorniOrdinati.map(giorno => (
           <div className="day-group" key={giorno}>
             <div className="day-header">
               <span>{dayLabel(giorno)}</span>
-              <span className="day-total">{formatEuro(spesePorGiorno[giorno].reduce((a,s)=>a+Number(s.amount),0))}</span>
+              <span className="day-total">
+                {formatEuro(spesePorGiorno[giorno].reduce((a, s) => a + Number(s.amount), 0))}
+              </span>
             </div>
-            {spesePorGiorno[giorno].map(s=>(
-              editingSpesaId===s.id?(
-                <div className="spesa-item editing" key={s.id}>
-                  <div className="edit-fields-row">
-                    <AutocompleteInput value={editSpesa.desc} onChange={v=>setEditSpesa(f=>({...f,desc:v}))} suggestions={descSuggerimenti} placeholder="Descrizione" style={{flex:'2 1 130px'}}/>
-                    <input type="number" step="0.01" min="0" value={editSpesa.amount} onChange={e=>setEditSpesa(f=>({...f,amount:e.target.value}))} style={{flex:'1 1 80px'}} placeholder="Importo"/>
-                    <select value={editSpesa.cat} onChange={e=>setEditSpesa(f=>({...f,cat:e.target.value,subcat:''}))} style={{flex:'1 1 110px'}}>
-                      {(data.categorie||DEFAULT_CATS).map(c=><option key={c}>{c}</option>)}
-                    </select>
-                    <select value={editSpesa.subcat} onChange={e=>setEditSpesa(f=>({...f,subcat:e.target.value}))} style={{flex:'1 1 110px'}}>
-                      <option value="">Nessuna sottocategoria</option>
-                      {((data.sottocategorie||{})[editSpesa.cat]||[]).map(sc=><option key={sc}>{sc}</option>)}
-                    </select>
-                    <input type="date" value={editSpesa.date} onChange={e=>setEditSpesa(f=>({...f,date:e.target.value}))} style={{flex:'1 1 130px'}}/>
-                  </div>
-                  <div className="edit-actions">
-                    <button className="btn primary small" onClick={()=>saveEditSpesa(s.id)}>✓ Salva</button>
-                    <button className="btn small" onClick={()=>setEditingSpesaId(null)}>✕ Annulla</button>
-                  </div>
+            {spesePorGiorno[giorno].map(s => (
+              <div className="spesa-item" key={s.id}>
+                <div style={{flex:1}}>
+                  <div className="spesa-desc">{s.desc}</div>
+                  <div className="spesa-cat">{s.cat}{s.subcat ? ` › ${s.subcat}` : ''}</div>
                 </div>
-              ):(
-                <div className="spesa-item" key={s.id}>
-                  <div style={{flex:1}}>
-                    <div className="spesa-desc">{s.desc}</div>
-                    <div className="spesa-cat">{s.cat}{s.subcat?` › ${s.subcat}`:''}</div>
-                  </div>
-                  <div className="spesa-amount">{formatEuro(s.amount)}</div>
-                  <button className="spesa-edit" title="Modifica" onClick={()=>startEditSpesa(s)}>✏️</button>
-                  <button className="spesa-delete" title="Elimina" onClick={()=>deleteSpesa(s.id)}>🗑</button>
-                </div>
-              )
+                <div className="spesa-amount">{formatEuro(s.amount)}</div>
+                <button className="spesa-delete" onClick={() => deleteSpesa(s.id)}>🗑</button>
+              </div>
             ))}
           </div>
-        ))}
-      </div>
-
-      {/* ENTRATE */}
-      <div className="card">
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
-          <div className="card-title" style={{marginBottom:0}}>💚 Entrate</div>
-          <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={()=>setShowAddEntrata(v=>!v)}>
-            {showAddEntrata?'✕ Annulla':'+ Aggiungi'}
-          </button>
-        </div>
-        {showAddEntrata&&(
-          <div className="add-spesa-form" style={{background:'var(--green-bg)',borderColor:'var(--green-border)'}}>
-            <div className="form-row">
-              <div className="form-group" style={{flex:2}}>
-                <label>Descrizione</label>
-                <AutocompleteInput value={formE.desc} onChange={v=>setFormE(f=>({...f,desc:v}))} suggestions={descSuggerimentiE} placeholder="Es. Stipendio" onKeyDown={e=>e.key==='Enter'&&addEntrata()}/>
-              </div>
-              <div className="form-group">
-                <label>Importo €</label>
-                <input type="number" placeholder="0.00" value={formE.amount} onChange={e=>setFormE(f=>({...f,amount:e.target.value}))}/>
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Data</label>
-                <input type="date" value={formE.date} onChange={e=>setFormE(f=>({...f,date:e.target.value}))}/>
-              </div>
-            </div>
-            <button className="btn primary" style={{background:'var(--green)',borderColor:'var(--green)'}} onClick={addEntrata}>💾 Salva entrata</button>
-          </div>
-        )}
-        {entrateMese.length===0&&<div className="empty">Nessuna entrata questo mese</div>}
-        {entrateMese.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(e=>(
-          editingEntrataId===e.id?(
-            <div className="entrata-item editing" key={e.id}>
-              <div className="edit-fields-row">
-                <AutocompleteInput value={editEntrata.desc} onChange={v=>setEditEntrata(f=>({...f,desc:v}))} suggestions={descSuggerimentiE} placeholder="Descrizione" style={{flex:'2 1 130px'}}/>
-                <input type="number" step="0.01" value={editEntrata.amount} onChange={ev=>setEditEntrata(f=>({...f,amount:ev.target.value}))} style={{flex:'1 1 80px'}} placeholder="Importo"/>
-                <input type="date" value={editEntrata.date} onChange={ev=>setEditEntrata(f=>({...f,date:ev.target.value}))} style={{flex:'1 1 130px'}}/>
-              </div>
-              <div className="edit-actions">
-                <button className="btn primary small" style={{background:'var(--green)',borderColor:'var(--green)'}} onClick={()=>saveEditEntrata(e.id)}>✓ Salva</button>
-                <button className="btn small" onClick={()=>setEditingEntrataId(null)}>✕ Annulla</button>
-              </div>
-            </div>
-          ):(
-            <div className="entrata-item" key={e.id}>
-              <div style={{flex:1}}>
-                <div className="spesa-desc">{e.desc}</div>
-                <div className="spesa-cat">{italianDate(e.date)}</div>
-              </div>
-              <div className="spesa-amount">{formatEuro(e.amount)}</div>
-              <button className="spesa-edit" title="Modifica" onClick={()=>startEditEntrata(e)}>✏️</button>
-              <button className="spesa-delete" title="Elimina" onClick={()=>deleteEntrata(e.id)}>🗑</button>
-            </div>
-          )
         ))}
       </div>
     </div>
@@ -577,91 +711,150 @@ function BudgetTab({ data, saveData }) {
 // ── SCADENZE TAB ───────────────────────────────────────────────────────────────
 function ScadenzeTab({ data, saveData }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({nome:'',amount:'',date:'',ricorrente:false});
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
+  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1' });
 
-  function add(){
-    if(!form.nome||!form.date) return;
-    saveData({scadenze:[...(data.scadenze||[]),{id:Date.now(),nome:form.nome,amount:Number(form.amount),date:form.date,ricorrente:form.ricorrente,pagato:false}]});
-    setForm({nome:'',amount:'',date:'',ricorrente:false});setShow(false);
+  function add() {
+    if (!form.nome || !form.date) return;
+    const baseId = Date.now();
+    const base = {
+      id: baseId,
+      nome: form.nome,
+      amount: Number(form.amount),
+      date: form.date,
+      pagato: false,
+      tipoRicorrenza: form.tipo === 'singola' ? null : (form.tipo === 'fissa' ? 'fissa' : 'periodica'),
+      intervalloMesi: form.tipo === 'periodica' ? Number(form.intervalloMesi || 1) : null,
+      gruppoId: null,
+      ricorrente: form.tipo !== 'singola',
+    };
+    let nuove = [base];
+    if (form.tipo === 'fissa' || form.tipo === 'periodica') {
+      nuove = nuove.concat(generaOccorrenze(base, 12));
+    }
+    saveData({ scadenze: [...(data.scadenze || []), ...nuove] });
+    setForm({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1' });
+    setShow(false);
   }
-  function togglePagato(id){saveData({scadenze:(data.scadenze||[]).map(s=>s.id===id?{...s,pagato:!s.pagato}:s)});}
-  function del(id){saveData({scadenze:(data.scadenze||[]).filter(s=>s.id!==id)});}
-  function startEdit(s){setEditingId(s.id);setEditForm({nome:s.nome,amount:s.amount,date:s.date,ricorrente:s.ricorrente});}
-  function saveEdit(id){saveData({scadenze:(data.scadenze||[]).map(s=>s.id===id?{...s,...editForm,amount:Number(editForm.amount)}:s)});setEditingId(null);}
+  function togglePagato(id) {
+    saveData({ scadenze: (data.scadenze || []).map(s => s.id === id ? {...s, pagato: !s.pagato} : s) });
+  }
+  function del(id) {
+    saveData({ scadenze: (data.scadenze || []).filter(s => s.id !== id) });
+  }
+  function delGruppo(gruppoId, scadenzaId) {
+    saveData({ scadenze: (data.scadenze || []).filter(s => s.id !== scadenzaId && s.gruppoId !== gruppoId && s.id !== gruppoId) });
+  }
+  // Estende un gruppo ricorrente generando altre 12 occorrenze a partire dall'ultima esistente
+  function estendiGruppo(gruppoId) {
+    const tutte = data.scadenze || [];
+    const delGruppoList = tutte.filter(s => s.id === gruppoId || s.gruppoId === gruppoId);
+    if (delGruppoList.length === 0) return;
+    const ultima = [...delGruppoList].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const finte = generaOccorrenze({ ...ultima, id: ultima.id, date: ultima.date }, 12);
+    saveData({ scadenze: [...tutte, ...finte] });
+  }
 
-  const sorted=[...(data.scadenze||[])].sort((a,b)=>a.date.localeCompare(b.date));
-  const daPagare=sorted.filter(s=>!s.pagato);
-  const pagate=sorted.filter(s=>s.pagato);
+  const sorted = [...(data.scadenze || [])].sort((a, b) => a.date.localeCompare(b.date));
+  const daPagare = sorted.filter(s => !s.pagato);
+  const pagate = sorted.filter(s => s.pagato);
+
+  function tipoLabel(s) {
+    if (!s.ricorrente) return null;
+    if (s.tipoRicorrenza === 'fissa') return '🔄 Mensile fissa';
+    if (s.tipoRicorrenza === 'periodica') return `🔄 Ogni ${s.intervalloMesi} mesi`;
+    return '🔄 Ricorrente';
+  }
 
   return (
     <div className="section active">
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>📅 Scadenze</div>
-        <button className="btn primary small" onClick={()=>setShow(v=>!v)}>{show?'✕ Annulla':'+ Aggiungi'}</button>
+        <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕ Annulla' : '+ Aggiungi'}</button>
       </div>
-      {show&&(
+
+      <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',lineHeight:'1.5'}}>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span className="scad-dot rosso" style={{display:'inline-block'}}></span> scaduta</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span className="scad-dot arancio" style={{display:'inline-block'}}></span> entro 5 giorni</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span className="scad-dot verde" style={{display:'inline-block'}}></span> oltre 5 giorni</span>
+      </div>
+
+      {show && (
         <div className="card" style={{background:'var(--accent-light)'}}>
           <div className="form-row">
-            <div className="form-group" style={{flex:2}}><label>Nome</label><input type="text" placeholder="Es. Affitto" value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))}/></div>
-            <div className="form-group"><label>Importo €</label><input type="number" placeholder="0.00" step="0.01" min="0" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))}/></div>
-          </div>
-          <div className="form-row">
-            <div className="form-group"><label>Data scadenza</label><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></div>
-            <div className="form-group" style={{justifyContent:'flex-end',paddingBottom:'2px'}}>
-              <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',marginTop:'auto'}}>
-                <input type="checkbox" checked={form.ricorrente} onChange={e=>setForm(f=>({...f,ricorrente:e.target.checked}))}/> Ricorrente
-              </label>
+            <div className="form-group" style={{flex:2}}>
+              <label>Nome</label>
+              <input type="text" placeholder="Es. Affitto" value={form.nome} onChange={e => setForm(f => ({...f, nome: e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>Importo €</label>
+              <input type="number" placeholder="0.00" step="0.01" min="0" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} />
             </div>
           </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Data {form.tipo === 'singola' ? 'scadenza' : 'prima scadenza'}</label>
+              <input type="date" value={form.date} onChange={e => setForm(f => ({...f, date: e.target.value}))} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Tipo scadenza</label>
+              <select value={form.tipo} onChange={e => setForm(f => ({...f, tipo: e.target.value}))}>
+                <option value="singola">Singola (una sola data)</option>
+                <option value="fissa">Mensile fissa (ogni mese, stesso giorno)</option>
+                <option value="periodica">Periodica multi-mese (ogni N mesi)</option>
+              </select>
+            </div>
+            {form.tipo === 'periodica' && (
+              <div className="form-group">
+                <label>Ogni quanti mesi</label>
+                <select value={form.intervalloMesi} onChange={e => setForm(f => ({...f, intervalloMesi: e.target.value}))}>
+                  <option value="2">2 mesi</option>
+                  <option value="3">3 mesi</option>
+                  <option value="4">4 mesi</option>
+                  <option value="6">6 mesi</option>
+                  <option value="12">12 mesi</option>
+                </select>
+              </div>
+            )}
+          </div>
+          {form.tipo !== 'singola' && (
+            <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}}>
+              Verranno generate automaticamente le prossime 12 occorrenze. Potrai modificarle o eliminarle singolarmente.
+            </div>
+          )}
           <button className="btn primary" onClick={add}>💾 Salva</button>
         </div>
       )}
 
-      {daPagare.length===0&&pagate.length===0&&<div className="empty">Nessuna scadenza</div>}
+      {daPagare.length === 0 && pagate.length === 0 && <div className="empty">Nessuna scadenza</div>}
 
-      {daPagare.map(s=>(
-        editingId===s.id?(
-          <div className="scad-item editing" key={s.id}>
-            <div className="edit-fields-row">
-              <input type="text" value={editForm.nome} placeholder="Nome" onChange={e=>setEditForm(f=>({...f,nome:e.target.value}))} style={{flex:'2 1 130px'}}/>
-              <input type="number" step="0.01" value={editForm.amount} placeholder="Importo" onChange={e=>setEditForm(f=>({...f,amount:e.target.value}))} style={{flex:'1 1 80px'}}/>
-              <input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} style={{flex:'1 1 130px'}}/>
-              <label style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'13px',whiteSpace:'nowrap'}}>
-                <input type="checkbox" checked={editForm.ricorrente} onChange={e=>setEditForm(f=>({...f,ricorrente:e.target.checked}))}/>Ricorrente
-              </label>
-            </div>
-            <div className="edit-actions">
-              <button className="btn primary small" onClick={()=>saveEdit(s.id)}>✓ Salva</button>
-              <button className="btn small" onClick={()=>setEditingId(null)}>✕ Annulla</button>
-            </div>
+      {daPagare.map(s => (
+        <div className="scad-item" key={s.id}>
+          <div className={`scad-dot ${scadenzaColor(s.date)}`}></div>
+          <div className="scad-info">
+            <div className="scad-name">{s.nome} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
+            <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
           </div>
-        ):(
-          <div className="scad-item" key={s.id}>
-            <div className={`scad-dot ${scadenzaColor(s.date)}`}></div>
-            <div className="scad-info">
-              <div className="scad-name">{s.nome} {s.ricorrente&&<span style={{fontSize:'11px',color:'var(--text3)'}}>🔄</span>}</div>
-              <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long'})}</div>
-            </div>
-            <div className="scad-amount">{s.amount?formatEuro(s.amount):''}</div>
-            <button className="spesa-edit" title="Modifica" onClick={()=>startEdit(s)}>✏️</button>
-            <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={()=>togglePagato(s.id)}>✓ Pagato</button>
-            <button className="btn small danger" onClick={()=>del(s.id)}>🗑</button>
-          </div>
-        )
+          <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+          <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={() => togglePagato(s.id)}>✓ Pagato</button>
+          <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
+        </div>
       ))}
 
-      {pagate.length>0&&(
+      {pagate.length > 0 && (
         <div style={{marginTop:'16px'}}>
           <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'8px'}}>✓ Pagate</div>
-          {pagate.map(s=>(
+          {pagate.map(s => (
             <div className="scad-item pagato" key={s.id}>
-              <div className="scad-dot verde"></div>
-              <div className="scad-info"><div className="scad-name">{s.nome}</div><div className="scad-date">{italianDate(s.date)}</div></div>
-              <div className="scad-amount">{s.amount?formatEuro(s.amount):''}</div>
-              <button className="btn small" onClick={()=>togglePagato(s.id)}>↩️ Riapri</button>
-              <button className="btn small danger" onClick={()=>del(s.id)}>🗑</button>
+              <div className={`scad-dot ${scadenzaColor(s.date)}`}></div>
+              <div className="scad-info">
+                <div className="scad-name">{s.nome}</div>
+                <div className="scad-date">{s.date}</div>
+              </div>
+              <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+              <button className="btn small" onClick={() => togglePagato(s.id)}>↩️ Riapri</button>
+              <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
             </div>
           ))}
         </div>
@@ -673,98 +866,96 @@ function ScadenzeTab({ data, saveData }) {
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({nome:'',cat:'',qta:'1'});
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
+  const [form, setForm] = useState({ nome: '', cat: '', qta: '1' });
 
-  const nomeSuggerimenti=[...new Set((data.listaSpesa||[]).map(i=>i.nome).filter(Boolean))];
-
-  function add(){
-    if(!form.nome) return;
-    saveData({listaSpesa:[...(data.listaSpesa||[]),{id:Date.now(),nome:form.nome,cat:form.cat||'Altro',qta:form.qta||'1',checked:false}]});
-    setForm({nome:'',cat:'',qta:'1'});
+  function add() {
+    if (!form.nome) return;
+    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', checked: false };
+    saveData({ listaSpesa: [...(data.listaSpesa || []), item] });
+    setForm({ nome: '', cat: '', qta: '1' });
   }
-  function toggle(id){saveData({listaSpesa:(data.listaSpesa||[]).map(i=>i.id===id?{...i,checked:!i.checked}:i)});}
-  function del(id){saveData({listaSpesa:(data.listaSpesa||[]).filter(i=>i.id!==id)});}
-  function clearChecked(){saveData({listaSpesa:(data.listaSpesa||[]).filter(i=>!i.checked)});}
-  function startEdit(item){setEditingId(item.id);setEditForm({nome:item.nome,cat:item.cat,qta:item.qta});}
-  function saveEdit(id){saveData({listaSpesa:(data.listaSpesa||[]).map(i=>i.id===id?{...i,...editForm}:i)});setEditingId(null);}
+  function toggle(id) {
+    saveData({ listaSpesa: (data.listaSpesa || []).map(i => i.id === id ? {...i, checked: !i.checked} : i) });
+  }
+  function del(id) {
+    saveData({ listaSpesa: (data.listaSpesa || []).filter(i => i.id !== id) });
+  }
+  function clearChecked() {
+    saveData({ listaSpesa: (data.listaSpesa || []).filter(i => !i.checked) });
+  }
 
-  const lista=data.listaSpesa||[];
-  const daPrendere=lista.filter(i=>!i.checked);
-  const presi=lista.filter(i=>i.checked);
-  const bycat={};
-  for(const item of daPrendere){if(!bycat[item.cat])bycat[item.cat]=[];bycat[item.cat].push(item);}
+  const lista = data.listaSpesa || [];
+  const daPrendere = lista.filter(i => !i.checked);
+  const presi = lista.filter(i => i.checked);
+
+  // Raggruppa per categoria
+  const bycat = {};
+  for (const item of daPrendere) {
+    if (!bycat[item.cat]) bycat[item.cat] = [];
+    bycat[item.cat].push(item);
+  }
 
   return (
     <div className="section active">
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>🛒 Lista della spesa</div>
         <div style={{display:'flex',gap:'6px'}}>
-          {presi.length>0&&<button className="btn small danger" onClick={clearChecked}>🗑 Rimuovi presi</button>}
-          <button className="btn primary small" onClick={()=>setShow(v=>!v)}>{show?'✕':'+ Aggiungi'}</button>
+          {presi.length > 0 && <button className="btn small danger" onClick={clearChecked}>🗑 Rimuovi presi</button>}
+          <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕' : '+ Aggiungi'}</button>
         </div>
       </div>
-      {show&&(
+
+      {show && (
         <div className="card" style={{background:'var(--accent-light)'}}>
           <div className="form-row">
             <div className="form-group" style={{flex:2}}>
               <label>Prodotto</label>
-              <AutocompleteInput value={form.nome} onChange={v=>setForm(f=>({...f,nome:v}))} suggestions={nomeSuggerimenti} placeholder="Es. Latte" onKeyDown={e=>e.key==='Enter'&&add()}/>
+              <input type="text" placeholder="Es. Latte" value={form.nome}
+                onChange={e => setForm(f => ({...f, nome: e.target.value}))}
+                onKeyDown={e => e.key === 'Enter' && add()} />
             </div>
-            <div className="form-group" style={{maxWidth:'70px'}}><label>Qtà</label><input type="text" value={form.qta} onChange={e=>setForm(f=>({...f,qta:e.target.value}))}/></div>
+            <div className="form-group" style={{maxWidth:'70px'}}>
+              <label>Qtà</label>
+              <input type="text" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
+            </div>
           </div>
           <div className="form-row">
             <div className="form-group">
               <label>Categoria</label>
-              <select value={form.cat} onChange={e=>setForm(f=>({...f,cat:e.target.value}))}>
+              <select value={form.cat} onChange={e => setForm(f => ({...f, cat: e.target.value}))}>
                 <option value="">Seleziona...</option>
-                {(data.categorieLista||DEFAULT_SPESA_CATS).map(c=><option key={c}>{c}</option>)}
+                {(data.categorieLista || DEFAULT_SPESA_CATS).map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
           <button className="btn primary" onClick={add}>➕ Aggiungi</button>
         </div>
       )}
-      {lista.length===0&&<div className="empty">Lista vuota — aggiungi qualcosa!</div>}
-      {Object.entries(bycat).map(([cat,items])=>(
+
+      {lista.length === 0 && <div className="empty">Lista vuota — aggiungi qualcosa!</div>}
+
+      {Object.entries(bycat).map(([cat, items]) => (
         <div key={cat} style={{marginBottom:'14px'}}>
           <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>{cat}</div>
-          {items.map(item=>(
-            editingId===item.id?(
-              <div className="spesa-lista-item editing" key={item.id}>
-                <div className="edit-fields-row">
-                  <AutocompleteInput value={editForm.nome} onChange={v=>setEditForm(f=>({...f,nome:v}))} suggestions={nomeSuggerimenti} placeholder="Prodotto" style={{flex:'2 1 120px'}}/>
-                  <input type="text" value={editForm.qta} placeholder="Qtà" onChange={e=>setEditForm(f=>({...f,qta:e.target.value}))} style={{width:'60px'}}/>
-                  <select value={editForm.cat} onChange={e=>setEditForm(f=>({...f,cat:e.target.value}))} style={{flex:'1 1 120px'}}>
-                    {(data.categorieLista||DEFAULT_SPESA_CATS).map(c=><option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div className="edit-actions">
-                  <button className="btn primary small" onClick={()=>saveEdit(item.id)}>✓ Salva</button>
-                  <button className="btn small" onClick={()=>setEditingId(null)}>✕ Annulla</button>
-                </div>
-              </div>
-            ):(
-              <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
-                <input type="checkbox" checked={item.checked} onChange={()=>toggle(item.id)}/>
-                <span style={{flex:1}}>{item.nome}</span>
-                <span style={{color:'var(--text3)',fontSize:'13px'}}>{item.qta!=='1'?`× ${item.qta}`:''}</span>
-                <button className="spesa-edit" title="Modifica" onClick={()=>startEdit(item)}>✏️</button>
-                <button className="spesa-delete" onClick={()=>del(item.id)}>✕</button>
-              </div>
-            )
+          {items.map(item => (
+            <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
+              <input type="checkbox" checked={item.checked} onChange={() => toggle(item.id)} />
+              <span style={{flex:1}}>{item.nome}</span>
+              <span style={{color:'var(--text3)',fontSize:'13px'}}>{item.qta !== '1' ? `× ${item.qta}` : ''}</span>
+              <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
+            </div>
           ))}
         </div>
       ))}
-      {presi.length>0&&(
+
+      {presi.length > 0 && (
         <div style={{marginTop:'8px'}}>
           <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px'}}>✓ Già presi</div>
-          {presi.map(item=>(
+          {presi.map(item => (
             <div className="spesa-lista-item checked" key={item.id}>
-              <input type="checkbox" checked={true} onChange={()=>toggle(item.id)}/>
+              <input type="checkbox" checked={true} onChange={() => toggle(item.id)} />
               <span style={{flex:1}}>{item.nome}</span>
-              <button className="spesa-delete" onClick={()=>del(item.id)}>✕</button>
+              <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
             </div>
           ))}
         </div>
@@ -775,38 +966,54 @@ function SpesaTab({ data, saveData }) {
 
 // ── REPORT TAB ─────────────────────────────────────────────────────────────────
 function ReportTab({ data }) {
-  const today=new Date();
-  const [year,setYear]=useState(today.getFullYear());
-  const [month,setMonth]=useState(today.getMonth()+1);
-  const speseMese=(data.spese||[]).filter(s=>{const[sy,sm]=s.date.split('-').map(Number);return sy===year&&sm===month;});
-  const totale=speseMese.reduce((a,s)=>a+Number(s.amount),0);
-  const byCat={};
-  for(const s of speseMese) byCat[s.cat]=(byCat[s.cat]||0)+Number(s.amount);
-  const catSort=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-  function prevMonth(){if(month===1){setMonth(12);setYear(y=>y-1);}else setMonth(m=>m-1);}
-  function nextMonth(){if(month===12){setMonth(1);setYear(y=>y+1);}else setMonth(m=>m+1);}
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth() + 1);
+
+  const speseMese = (data.spese || []).filter(s => {
+    const [sy, sm] = s.date.split('-').map(Number);
+    return sy === year && sm === month;
+  });
+  const totale = speseMese.reduce((a, s) => a + Number(s.amount), 0);
+
+  const byCat = {};
+  for (const s of speseMese) {
+    byCat[s.cat] = (byCat[s.cat] || 0) + Number(s.amount);
+  }
+  const catSort = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
+  function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
+  function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
+
   return (
     <div className="section active">
       <div className="budget-header">
         <div className="month-nav">
           <button onClick={prevMonth}>‹</button>
-          <div className="month-label">{monthLabel(year,month)}</div>
+          <div className="month-label">{monthLabel(year, month)}</div>
           <button onClick={nextMonth}>›</button>
         </div>
       </div>
+
       <div className="card">
         <div className="card-title">📊 Spese per categoria</div>
-        {catSort.length===0&&<div className="empty">Nessuna spesa questo mese</div>}
-        {catSort.map(([cat,amt])=>(
+        {catSort.length === 0 && <div className="empty">Nessuna spesa questo mese</div>}
+        {catSort.map(([cat, amt]) => (
           <div className="report-cat-bar" key={cat}>
             <div className="report-cat-label">
               <span>{cat}</span>
-              <span>{formatEuro(amt)} <span style={{color:'var(--text3)',fontSize:'12px'}}>({totale?Math.round(amt/totale*100):0}%)</span></span>
+              <span>{formatEuro(amt)} <span style={{color:'var(--text3)',fontSize:'12px'}}>({totale ? Math.round(amt/totale*100) : 0}%)</span></span>
             </div>
-            <div className="bar-bg"><div className="bar-fill" style={{width:totale?`${amt/totale*100}%`:'0%'}}></div></div>
+            <div className="bar-bg">
+              <div className="bar-fill" style={{width: totale ? `${amt/totale*100}%` : '0%'}}></div>
+            </div>
           </div>
         ))}
-        {totale>0&&<div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}><span>Totale</span><span style={{color:'var(--red)'}}>{formatEuro(totale)}</span></div>}
+        {totale > 0 && (
+          <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
+            <span>Totale</span><span style={{color:'var(--red)'}}>{formatEuro(totale)}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -814,32 +1021,52 @@ function ReportTab({ data }) {
 
 // ── IMPOSTAZIONI TAB ───────────────────────────────────────────────────────────
 function ImpostazioniTab({ data, saveData }) {
-  const [newCat,setNewCat]=useState('');
-  const [newCatLista,setNewCatLista]=useState('');
-  function addCat(){if(!newCat.trim())return;saveData({categorie:[...(data.categorie||DEFAULT_CATS),newCat.trim()]});setNewCat('');}
-  function delCat(c){saveData({categorie:(data.categorie||DEFAULT_CATS).filter(x=>x!==c)});}
-  function addCatLista(){if(!newCatLista.trim())return;saveData({categorieLista:[...(data.categorieLista||DEFAULT_SPESA_CATS),newCatLista.trim()]});setNewCatLista('');}
-  function delCatLista(c){saveData({categorieLista:(data.categorieLista||DEFAULT_SPESA_CATS).filter(x=>x!==c)});}
+  const [newCat, setNewCat] = useState('');
+  const [newCatLista, setNewCatLista] = useState('');
+
+  function addCat() {
+    if (!newCat.trim()) return;
+    saveData({ categorie: [...(data.categorie || DEFAULT_CATS), newCat.trim()] });
+    setNewCat('');
+  }
+  function delCat(c) {
+    saveData({ categorie: (data.categorie || DEFAULT_CATS).filter(x => x !== c) });
+  }
+  function addCatLista() {
+    if (!newCatLista.trim()) return;
+    saveData({ categorieLista: [...(data.categorieLista || DEFAULT_SPESA_CATS), newCatLista.trim()] });
+    setNewCatLista('');
+  }
+  function delCatLista(c) {
+    saveData({ categorieLista: (data.categorieLista || DEFAULT_SPESA_CATS).filter(x => x !== c) });
+  }
+
   return (
     <div className="section active">
       <div className="card">
         <div className="setting-section">
           <div className="setting-label">Categorie spese</div>
-          <div>{(data.categorie||DEFAULT_CATS).map(c=><span className="cat-chip" key={c}>{c}<button onClick={()=>delCat(c)}>✕</button></span>)}</div>
+          <div>{(data.categorie || DEFAULT_CATS).map(c => (
+            <span className="cat-chip" key={c}>{c}<button onClick={() => delCat(c)}>✕</button></span>
+          ))}</div>
           <div className="form-row" style={{marginTop:'10px'}}>
-            <input type="text" placeholder="Nuova categoria..." value={newCat} onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCat()} style={{flex:1}}/>
+            <input type="text" placeholder="Nuova categoria..." value={newCat} onChange={e => setNewCat(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCat()} style={{flex:1}} />
             <button className="btn primary" onClick={addCat}>Aggiungi</button>
           </div>
         </div>
+
         <div className="setting-section" style={{marginTop:'20px'}}>
           <div className="setting-label">Categorie lista spesa</div>
-          <div>{(data.categorieLista||DEFAULT_SPESA_CATS).map(c=><span className="cat-chip" key={c}>{c}<button onClick={()=>delCatLista(c)}>✕</button></span>)}</div>
+          <div>{(data.categorieLista || DEFAULT_SPESA_CATS).map(c => (
+            <span className="cat-chip" key={c}>{c}<button onClick={() => delCatLista(c)}>✕</button></span>
+          ))}</div>
           <div className="form-row" style={{marginTop:'10px'}}>
-            <input type="text" placeholder="Nuova categoria..." value={newCatLista} onChange={e=>setNewCatLista(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCatLista()} style={{flex:1}}/>
+            <input type="text" placeholder="Nuova categoria..." value={newCatLista} onChange={e => setNewCatLista(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCatLista()} style={{flex:1}} />
             <button className="btn primary" onClick={addCatLista}>Aggiungi</button>
           </div>
         </div>
       </div>
+
       <div className="card" style={{marginTop:'8px'}}>
         <div className="setting-label" style={{marginBottom:'8px'}}>ℹ️ Informazioni</div>
         <div style={{fontSize:'13px',color:'var(--text2)',lineHeight:'1.6'}}>
@@ -851,11 +1078,14 @@ function ImpostazioniTab({ data, saveData }) {
   );
 }
 
-const root=ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App/>);
+// ── RENDER ─────────────────────────────────────────────────────────────────────
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
 
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{navigator.serviceWorker.register('/fcc/sw.js').catch(()=>{});});
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/fcc/sw.js').catch(() => {});
+  });
 }
 </script>
 </body>
