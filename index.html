@@ -969,6 +969,7 @@ function ReportTab({ data }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
+  const [expandedCats, setExpandedCats] = useState({});
 
   const speseMese = (data.spese || []).filter(s => {
     const [sy, sm] = s.date.split('-').map(Number);
@@ -981,6 +982,20 @@ function ReportTab({ data }) {
     byCat[s.cat] = (byCat[s.cat] || 0) + Number(s.amount);
   }
   const catSort = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
+  // Raggruppa le spese per categoria, con elenco delle singole voci ordinate per data (più recenti prima)
+  const speseByCat = {};
+  for (const s of speseMese) {
+    if (!speseByCat[s.cat]) speseByCat[s.cat] = [];
+    speseByCat[s.cat].push(s);
+  }
+  for (const cat in speseByCat) {
+    speseByCat[cat].sort((a, b) => b.date.localeCompare(a.date) || (b.id || 0) - (a.id || 0));
+  }
+
+  function toggleCat(cat) {
+    setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
+  }
 
   function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
   function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
@@ -1014,6 +1029,39 @@ function ReportTab({ data }) {
             <span>Totale</span><span style={{color:'var(--red)'}}>{formatEuro(totale)}</span>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">📋 Dettaglio movimenti per categoria</div>
+        {catSort.length === 0 && <div className="empty">Nessuna spesa questo mese</div>}
+        {catSort.map(([cat, amt]) => (
+          <div key={cat} style={{marginBottom:'10px'}}>
+            <div
+              onClick={() => toggleCat(cat)}
+              style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'8px',cursor:'pointer'}}
+            >
+              <span style={{fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}>
+                <span style={{fontSize:'11px',color:'var(--text3)'}}>{expandedCats[cat] ? '▾' : '▸'}</span>
+                {cat}
+                <span style={{fontSize:'12px',color:'var(--text3)',fontWeight:'400'}}>({speseByCat[cat].length})</span>
+              </span>
+              <span style={{fontWeight:'700',color:'var(--red)'}}>{formatEuro(amt)}</span>
+            </div>
+            {expandedCats[cat] && (
+              <div style={{marginTop:'6px',paddingLeft:'8px'}}>
+                {speseByCat[cat].map(s => (
+                  <div className="spesa-item" key={s.id}>
+                    <div style={{flex:1}}>
+                      <div className="spesa-desc">{s.desc}</div>
+                      <div className="spesa-cat">{s.date}{s.subcat ? ` · ${s.subcat}` : ''}</div>
+                    </div>
+                    <div className="spesa-amount">{formatEuro(s.amount)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
