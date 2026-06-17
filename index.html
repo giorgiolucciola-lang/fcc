@@ -28,13 +28,13 @@
   --text: #1a1520;
   --text2: #6a5878;
   --text3: #a898b8;
-  --green: #27ae60;
+  --green: #16c462;
   --green-bg: #eafaf1;
   --green-border: #a9dfbf;
-  --red: #c0392b;
+  --red: #e8312b;
   --red-bg: #fdf0ee;
   --red-border: #e8b0a8;
-  --orange: #e67e22;
+  --orange: #ff9f1c;
   --orange-bg: #fef5ec;
   --radius: 10px;
   --shadow: 0 2px 8px rgba(155,89,182,0.08);
@@ -283,6 +283,12 @@ function localDateStr(date = new Date()) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+// Converte una data in formato ISO (yyyy-mm-dd) nel formato italiano breve gg/mm/aaaa
+function formatDataIT(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
 }
 function formatEuro(n) {
   return '€ ' + Number(n || 0).toFixed(2).replace('.', ',');
@@ -612,7 +618,7 @@ function BudgetTab({ data, saveData }) {
           <div className="entrata-item" key={e.id}>
             <div style={{flex:1}}>
               <div className="spesa-desc">{e.desc}</div>
-              <div className="spesa-cat">{e.date}</div>
+              <div className="spesa-cat">{formatDataIT(e.date)}</div>
             </div>
             <div className="spesa-amount">{formatEuro(e.amount)}</div>
             <button className="spesa-delete" onClick={() => deleteEntrata(e.id)}>🗑</button>
@@ -794,8 +800,6 @@ function ScadenzeTab({ data, saveData }) {
   }
 
   const sorted = [...(data.scadenze || [])].sort((a, b) => a.date.localeCompare(b.date));
-  const daPagare = sorted.filter(s => !s.pagato);
-  const pagate = sorted.filter(s => s.pagato);
 
   function tipoLabel(s) {
     if (!s.ricorrente) return null;
@@ -876,19 +880,19 @@ function ScadenzeTab({ data, saveData }) {
         </div>
       )}
 
-      {daPagare.length === 0 && pagate.length === 0 && <div className="empty">Nessuna scadenza</div>}
+      {sorted.length === 0 && <div className="empty">Nessuna scadenza</div>}
 
-      {daPagare.map(s => {
+      {sorted.map(s => {
         const st = statoBtn(s);
         return (
         <div key={s.id}>
-          <div className="scad-item">
+          <div className={`scad-item${s.pagato ? ' pagato' : ''}`}>
             <div className="scad-info">
               <div className="scad-name">{s.nome} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
               <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
             </div>
             <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-            <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s.id)}>{st.label}</button>
+            <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s.id)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
             <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
             <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
           </div>
@@ -932,53 +936,6 @@ function ScadenzeTab({ data, saveData }) {
         </div>
         );
       })}
-
-      {pagate.length > 0 && (
-        <div style={{marginTop:'16px'}}>
-          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'8px'}}>✓ Pagate</div>
-          {pagate.map(s => {
-            const st = statoBtn(s);
-            return (
-            <div key={s.id}>
-              <div className="scad-item pagato">
-                <div className="scad-info">
-                  <div className="scad-name">{s.nome}</div>
-                  <div className="scad-date">{s.date}</div>
-                </div>
-                <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-                <button className="btn small" style={{borderColor:'var(--green-border)',color:'var(--green)'}} onClick={() => togglePagato(s.id)}>↩️ Riapri</button>
-                <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
-                <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
-              </div>
-              {editId === s.id && (
-                <div className="card" style={{background:'var(--accent-light)',marginTop:'-4px',marginBottom:'10px'}}>
-                  <div className="form-row">
-                    <div className="form-group" style={{flex:2}}>
-                      <label>Nome</label>
-                      <input type="text" value={editForm.nome} onChange={e => setEditForm(f => ({...f, nome: e.target.value}))} />
-                    </div>
-                    <div className="form-group">
-                      <label>Importo €</label>
-                      <input type="number" step="0.01" min="0" value={editForm.amount} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))} />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Data</label>
-                      <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:'8px'}}>
-                    <button className="btn primary" onClick={() => saveEdit(s)}>💾 Salva modifica</button>
-                    <button className="btn" onClick={cancelEdit}>✕ Annulla</button>
-                  </div>
-                </div>
-              )}
-            </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -1090,6 +1047,7 @@ function ReportTab({ data }) {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [expandedCats, setExpandedCats] = useState({});
+  const [scadFiltroMese, setScadFiltroMese] = useState(false); // false = tutto lo storico, true = solo mese selezionato
 
   const speseMese = (data.spese || []).filter(s => {
     const [sy, sm] = s.date.split('-').map(Number);
@@ -1116,6 +1074,17 @@ function ReportTab({ data }) {
   function toggleCat(cat) {
     setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
   }
+
+  // Storico scadenze pagate: tutto per default, filtrabile per il mese selezionato
+  const scadenzePagate = (data.scadenze || [])
+    .filter(s => s.pagato)
+    .filter(s => {
+      if (!scadFiltroMese) return true;
+      const [scy, scm] = s.date.split('-').map(Number);
+      return scy === year && scm === month;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const totScadPagate = scadenzePagate.reduce((a, s) => a + Number(s.amount || 0), 0);
 
   function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
   function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
@@ -1173,7 +1142,7 @@ function ReportTab({ data }) {
                   <div className="spesa-item" key={s.id}>
                     <div style={{flex:1}}>
                       <div className="spesa-desc">{s.desc}</div>
-                      <div className="spesa-cat">{s.date}{s.subcat ? ` · ${s.subcat}` : ''}</div>
+                      <div className="spesa-cat">{formatDataIT(s.date)}{s.subcat ? ` · ${s.subcat}` : ''}</div>
                     </div>
                     <div className="spesa-amount">{formatEuro(s.amount)}</div>
                   </div>
@@ -1182,6 +1151,30 @@ function ReportTab({ data }) {
             )}
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+          <div className="card-title" style={{marginBottom:0}}>🧾 Storico scadenze pagate</div>
+          <button className="btn small" onClick={() => setScadFiltroMese(v => !v)}>
+            {scadFiltroMese ? `📅 ${monthLabel(year, month)}` : '📋 Tutto lo storico'}
+          </button>
+        </div>
+        {scadenzePagate.length === 0 && <div className="empty">Nessuna scadenza pagata{scadFiltroMese ? ' in questo mese' : ''}</div>}
+        {scadenzePagate.map(s => (
+          <div className="scad-item pagato" key={s.id}>
+            <div className="scad-info">
+              <div className="scad-name">{s.nome}</div>
+              <div className="scad-date">{formatDataIT(s.date)}</div>
+            </div>
+            <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+          </div>
+        ))}
+        {scadenzePagate.length > 0 && (
+          <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
+            <span>Totale</span><span style={{color:'var(--green)'}}>{formatEuro(totScadPagate)}</span>
+          </div>
+        )}
       </div>
     </div>
   );
