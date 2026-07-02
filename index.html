@@ -28,7 +28,7 @@
   --accent-dark: #7d3f9e;
   --text: #1a1520;
   --text2: #6a5878;
-  --text3: #a898b8;
+  --text3: #8a7799;
   --green: #16c462;
   --green-bg: #eafaf1;
   --green-border: #a9dfbf;
@@ -53,6 +53,7 @@ nav {
 .nav-top {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 16px;
+  max-width: 700px; margin: 0 auto;
 }
 .nav-title { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
 .nav-user { color: rgba(255,255,255,0.85); font-size: 13px; display: flex; align-items: center; gap: 8px; }
@@ -61,6 +62,7 @@ nav {
   padding: 0 8px 0;
   gap: 2px;
   scrollbar-width: none;
+  max-width: 684px; margin: 0 auto;
 }
 .nav-tabs::-webkit-scrollbar { display: none; }
 .tab-btn {
@@ -179,7 +181,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
   opacity: 0.9;
 }
 .spesa-item {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -188,9 +190,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
   font-size: 14px;
 }
 .spesa-cat { font-size: 11px; color: var(--text3); }
-.spesa-desc { flex: 1; font-weight: 500; }
+.spesa-desc { flex: 1 1 120px; font-weight: 500; min-width: 0; }
 .spesa-amount { font-weight: 700; color: var(--red); white-space: nowrap; }
-.spesa-delete { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 16px; padding: 2px 4px; border-radius: 4px; }
+.spesa-delete { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 17px; padding: 6px 8px; border-radius: 6px; }
 .spesa-delete:hover { color: var(--red); background: var(--red-bg); }
 
 .add-spesa-form {
@@ -200,7 +202,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
 
 /* SCADENZE */
 .scad-item {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 12px 14px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 10px;
   margin-bottom: 8px;
@@ -210,18 +212,23 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
 .scad-dot.verde { background: var(--green); }
 .scad-dot.arancio { background: var(--orange); }
 .scad-dot.rosso { background: var(--red); }
-.scad-info { flex: 1; }
+.scad-info { flex: 1 1 150px; min-width: 0; }
 .scad-name { font-size: 14px; font-weight: 600; }
 .scad-date { font-size: 12px; color: var(--text3); }
 .scad-amount { font-weight: 700; font-size: 15px; }
+.scad-actions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  justify-content: flex-end; margin-left: auto;
+}
 
 /* SPESA (lista) */
 .spesa-lista-item {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 14px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px;
   margin-bottom: 6px;
 }
+.spesa-lista-item > span { min-width: 0; word-break: break-word; }
 .spesa-lista-item.checked { opacity: 0.5; text-decoration: line-through; }
 .spesa-lista-item input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
 
@@ -266,13 +273,40 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
 
 /* Entrate list */
 .entrata-item {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 12px; background: var(--green-bg);
   border: 1px solid var(--green-border); border-radius: 8px;
   margin-bottom: 6px;
 }
 .entrata-item .spesa-desc { color: var(--green); }
 .entrata-item .spesa-amount { color: var(--green); }
+
+/* ── SCHERMI STRETTI (iPhone) ─────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .nav-top { padding: 9px 12px; }
+  .nav-title { font-size: 14px; }
+  .nav-user { gap: 6px; font-size: 12px; }
+  .print-btn, .sync-btn { padding: 6px 10px; font-size: 11px; }
+  .nav-tabs { padding: 0 4px 0; }
+  .tab-btn { padding: 9px 10px; font-size: 12px; }
+
+  .section { padding: 12px; }
+  .card { padding: 13px; }
+
+  .summary-grid { gap: 8px; }
+  .summary-card { padding: 11px 6px; }
+  .summary-card .label { font-size: 10px; }
+  .summary-card .amount { font-size: 16px; word-break: break-word; }
+
+  .month-label { font-size: 14px; min-width: 0; }
+
+  .btn.small { padding: 7px 11px; font-size: 12px; }
+  .scad-actions .btn.small { padding: 7px 10px; }
+
+  .form-group { min-width: 90px; }
+
+  .spesa-lista-item input[type=number] { width: 52px; font-size: 13px; padding: 6px 4px; }
+}
 </style>
 </head>
 <body>
@@ -988,10 +1022,12 @@ function ScadenzeTab({ data, saveData }) {
               <div className="scad-name">{s.nome} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
               <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
             </div>
-            <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-            <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s.id)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
-            <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
-            <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
+            <div className="scad-actions">
+              <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+              <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s.id)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
+              <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
+              <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
+            </div>
           </div>
           {editId === s.id && (
             <div className="card" style={{background:'var(--accent-light)',marginTop:'-4px',marginBottom:'10px'}}>
