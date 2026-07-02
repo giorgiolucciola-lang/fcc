@@ -944,6 +944,20 @@ function ScadenzeTab({ data, saveData }) {
 function SpesaTab({ data, saveData }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ nome: '', cat: '', qta: '1' });
+  const [newCatInline, setNewCatInline] = useState('');
+  const [showNewCat, setShowNewCat] = useState(false);
+
+  // Elenco categorie robusto: se l'array è vuoto o assente, usa i default
+  const catList = (data.categorieLista && data.categorieLista.length) ? data.categorieLista : DEFAULT_SPESA_CATS;
+
+  function addCatInline() {
+    if (!newCatInline.trim()) return;
+    const cats = [...catList, newCatInline.trim()];
+    saveData({ categorieLista: cats });
+    setForm(f => ({ ...f, cat: newCatInline.trim() }));
+    setNewCatInline('');
+    setShowNewCat(false);
+  }
 
   function add() {
     if (!form.nome) return;
@@ -993,16 +1007,22 @@ function SpesaTab({ data, saveData }) {
             </div>
             <div className="form-group" style={{maxWidth:'70px'}}>
               <label>Qtà</label>
-              <input type="text" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
+              <input type="text" inputMode="numeric" pattern="[0-9]*" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
             </div>
           </div>
           <div className="form-row">
             <div className="form-group">
               <label>Categoria</label>
-              <select value={form.cat} onChange={e => setForm(f => ({...f, cat: e.target.value}))}>
+              <select value={form.cat} onChange={e => { setForm(f => ({...f, cat: e.target.value})); setShowNewCat(false); }}>
                 <option value="">Seleziona...</option>
-                {(data.categorieLista || DEFAULT_SPESA_CATS).map(c => <option key={c}>{c}</option>)}
+                {catList.map(c => <option key={c}>{c}</option>)}
               </select>
+              {!showNewCat && <button type="button" onClick={() => setShowNewCat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova categoria</button>}
+              {showNewCat && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
+                <input type="text" placeholder="Nome categoria" value={newCatInline} onChange={e => setNewCatInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addCatInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
+                <button type="button" className="btn primary small" onClick={addCatInline}>✓</button>
+                <button type="button" className="btn small" onClick={() => setShowNewCat(false)}>✕</button>
+              </div>}
             </div>
           </div>
           <button className="btn primary" onClick={add}>➕ Aggiungi</button>
@@ -1018,7 +1038,9 @@ function SpesaTab({ data, saveData }) {
             <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
               <input type="checkbox" checked={item.checked} onChange={() => toggle(item.id)} />
               <span style={{flex:1}}>{item.nome}</span>
-              <span style={{color:'var(--text3)',fontSize:'13px'}}>{item.qta !== '1' ? `× ${item.qta}` : ''}</span>
+              {item.qta && item.qta !== '1' && (
+                <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'14px',padding:'3px 11px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
+              )}
               <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
             </div>
           ))}
