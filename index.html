@@ -480,6 +480,8 @@ function BudgetTab({ data, saveData }) {
   const [showNewCat, setShowNewCat] = useState(false);
   const [newSubcatInline, setNewSubcatInline] = useState('');
   const [showNewSubcat, setShowNewSubcat] = useState(false);
+  const [editSpesaId, setEditSpesaId] = useState(null);
+  const [editSpesaForm, setEditSpesaForm] = useState({ desc: '', amount: '', cat: '', subcat: '', date: '' });
 
   function addCatInline() {
     if (!newCatInline.trim()) return;
@@ -550,6 +552,22 @@ function BudgetTab({ data, saveData }) {
   }
   function deleteSpesa(id) {
     saveData({ spese: (data.spese || []).filter(s => s.id !== id) });
+  }
+  function startEditSpesa(s) {
+    setEditSpesaId(s.id);
+    setEditSpesaForm({ desc: s.desc, amount: s.amount, cat: s.cat || '', subcat: s.subcat || '', date: s.date });
+  }
+  function cancelEditSpesa() {
+    setEditSpesaId(null);
+  }
+  function saveEditSpesa(id) {
+    if (!editSpesaForm.desc || !editSpesaForm.amount) return;
+    saveData({
+      spese: (data.spese || []).map(s => s.id === id
+        ? { ...s, desc: editSpesaForm.desc, amount: Number(editSpesaForm.amount), cat: editSpesaForm.cat || 'Altro', subcat: editSpesaForm.subcat || '', date: editSpesaForm.date }
+        : s)
+    });
+    setEditSpesaId(null);
   }
   function addEntrata() {
     if (!formE.desc || !formE.amount) return;
@@ -708,13 +726,58 @@ function BudgetTab({ data, saveData }) {
               </span>
             </div>
             {spesePorGiorno[giorno].map(s => (
-              <div className="spesa-item" key={s.id}>
-                <div style={{flex:1}}>
-                  <div className="spesa-desc">{s.desc}</div>
-                  <div className="spesa-cat">{s.cat}{s.subcat ? ` › ${s.subcat}` : ''}</div>
+              <div key={s.id}>
+                <div className="spesa-item">
+                  <div style={{flex:1}}>
+                    <div className="spesa-desc">{s.desc}</div>
+                    <div className="spesa-cat">{s.cat}{s.subcat ? ` › ${s.subcat}` : ''}</div>
+                  </div>
+                  <div className="spesa-amount">{formatEuro(s.amount)}</div>
+                  <button className="btn small" onClick={() => startEditSpesa(s)}>✏️</button>
+                  <button className="spesa-delete" onClick={() => deleteSpesa(s.id)}>🗑</button>
                 </div>
-                <div className="spesa-amount">{formatEuro(s.amount)}</div>
-                <button className="spesa-delete" onClick={() => deleteSpesa(s.id)}>🗑</button>
+                {editSpesaId === s.id && (
+                  <div className="add-spesa-form" style={{marginTop:'-4px',marginBottom:'10px'}}>
+                    <div className="form-row">
+                      <div className="form-group" style={{flex:2}}>
+                        <label>Descrizione</label>
+                        <input type="text" value={editSpesaForm.desc} onChange={e => setEditSpesaForm(f => ({...f, desc: e.target.value}))} />
+                      </div>
+                      <div className="form-group">
+                        <label>Importo €</label>
+                        <input type="number" step="0.01" min="0" value={editSpesaForm.amount} onChange={e => setEditSpesaForm(f => ({...f, amount: e.target.value}))} />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Categoria</label>
+                        <select value={editSpesaForm.cat} onChange={e => setEditSpesaForm(f => ({...f, cat: e.target.value, subcat: ''}))}>
+                          <option value="">Seleziona...</option>
+                          {(data.categorie || DEFAULT_CATS).map(c => <option key={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Data</label>
+                        <input type="date" value={editSpesaForm.date} onChange={e => setEditSpesaForm(f => ({...f, date: e.target.value}))} />
+                      </div>
+                    </div>
+                    {editSpesaForm.cat && (
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Sottocategoria <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
+                          <select value={editSpesaForm.subcat} onChange={e => setEditSpesaForm(f => ({...f, subcat: e.target.value}))}>
+                            <option value="">Nessuna</option>
+                            {((data.sottocategorie || {})[editSpesaForm.cat] || []).map(sc => <option key={sc}>{sc}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{display:'flex',gap:'8px'}}>
+                      <button className="btn primary" onClick={() => saveEditSpesa(s.id)}>💾 Salva modifica</button>
+                      <button className="btn" onClick={cancelEditSpesa}>✕ Annulla</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
