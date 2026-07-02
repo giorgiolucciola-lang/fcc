@@ -1,7 +1,19 @@
 // ── Service Worker FCC ────────────────────────────────────────────────────────
 // Incrementa CACHE_VERSION ad ogni deploy per forzare l'aggiornamento della PWA
 const CACHE_VERSION = "fcc-v3";
-const CACHE_FILES = ["/fcc/", "/fcc/index.html", "/fcc/manifest.json", "/fcc/icon.png"];
+const CACHE_FILES = [
+  "/fcc/",
+  "/fcc/index.html",
+  "/fcc/manifest.json",
+  "/fcc/icon.png",
+  // Librerie locali: indispensabili per l'apertura offline
+  "/fcc/vendor/react.production.min.js",
+  "/fcc/vendor/react-dom.production.min.js",
+  "/fcc/vendor/babel.min.js",
+  "/fcc/vendor/firebase-app-compat.js",
+  "/fcc/vendor/firebase-auth-compat.js",
+  "/fcc/vendor/firebase-firestore-compat.js",
+];
 
 // Installazione: pre-cacha i file principali
 self.addEventListener("install", e => {

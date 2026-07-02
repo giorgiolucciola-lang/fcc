@@ -8,13 +8,14 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#9B59B6">
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js"></script>
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<!-- Librerie ospitate in locale (cartella /vendor) per funzionamento offline -->
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+<!-- Firebase (locale) -->
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-auth-compat.js"></script>
+<script src="vendor/firebase-firestore-compat.js"></script>
 <style>
 :root {
   --bg: #f8f5fc;
@@ -276,6 +277,15 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
+
+// ── PERSISTENZA OFFLINE ──────────────────────────────────────────────────────
+// Salva i dati in locale (IndexedDB) così la lista, le spese e le scadenze
+// restano leggibili e modificabili anche senza connessione. Le modifiche fatte
+// offline vengono messe in coda e sincronizzate da sole appena torna internet.
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {
+  // Può fallire se il browser non la supporta o se ci sono più schede aperte:
+  // in quel caso l'app funziona comunque, solo senza cache offline dei dati.
+});
 
 // ── UTILS ──────────────────────────────────────────────────────────────────────
 function localDateStr(date = new Date()) {
