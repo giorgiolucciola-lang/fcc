@@ -953,7 +953,7 @@ function ScadenzeTab({ data, saveData }) {
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', cat: '', qta: '1' });
+  const [form, setForm] = useState({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
 
@@ -971,9 +971,16 @@ function SpesaTab({ data, saveData }) {
 
   function add() {
     if (!form.nome) return;
-    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', checked: false };
+    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false };
     saveData({ listaSpesa: [...(data.listaSpesa || []), item] });
-    setForm({ nome: '', cat: '', qta: '1' });
+    setForm({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+  }
+  // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
+  function handleFormUnitChange(val) {
+    const qtaNum = parseFloat(form.qta);
+    const unitNum = parseFloat(val);
+    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : form.prezzoTotale;
+    setForm(f => ({ ...f, prezzoUnitario: val, prezzoTotale: totaleAuto }));
   }
   function toggle(id) {
     saveData({ listaSpesa: (data.listaSpesa || []).map(i => i.id === id ? {...i, checked: !i.checked} : i) });
@@ -983,6 +990,63 @@ function SpesaTab({ data, saveData }) {
   }
   function clearChecked() {
     saveData({ listaSpesa: (data.listaSpesa || []).filter(i => !i.checked) });
+  }
+  // Aggiorna il prezzo unitario di un articolo e ricalcola in automatico il totale
+  function updatePrezzoUnitario(id, val) {
+    saveData({
+      listaSpesa: (data.listaSpesa || []).map(i => {
+        if (i.id !== id) return i;
+        const qtaNum = parseFloat(i.qta);
+        const unitNum = parseFloat(val);
+        const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : i.prezzoTotale;
+        return { ...i, prezzoUnitario: val, prezzoTotale: totaleAuto };
+      })
+    });
+  }
+  // Aggiorna il prezzo totale direttamente (utile per i prodotti a peso, senza prezzo unitario)
+  function updatePrezzoTotale(id, val) {
+    saveData({ listaSpesa: (data.listaSpesa || []).map(i => i.id === id ? { ...i, prezzoTotale: val } : i) });
+  }
+  // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
+  // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
+  function registraSpesa() {
+    const conPrezzo = presi.filter(i => Number(i.prezzoTotale) > 0);
+    const perCategoria = {};
+    for (const item of conPrezzo) {
+      perCategoria[item.cat] = (perCategoria[item.cat] || 0) + Number(item.prezzoTotale);
+    }
+    const oggi = localDateStr();
+    const nuoveSpese = Object.entries(perCategoria).map(([cat, amount], idx) => ({
+      id: Date.now() + idx,
+      desc: 'Spesa supermercato',
+      amount: Math.round(amount * 100) / 100,
+      cat,
+      subcat: '',
+      date: oggi,
+    }));
+    saveData({
+      spese: nuoveSpese.length ? [...(data.spese || []), ...nuoveSpese] : data.spese,
+      listaSpesa: (data.listaSpesa || []).filter(i => !i.checked),
+    });
+  }
+  // Rendering di una riga articolo (usata sia per "da prendere" che per "già presi")
+  function renderItem(item) {
+    return (
+      <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
+        <input type="checkbox" checked={item.checked} onChange={() => toggle(item.id)} />
+        <span style={{flex:1}}>{item.nome}</span>
+        {item.qta && item.qta !== '1' && (
+          <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'12px',padding:'2px 8px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
+        )}
+        <input type="number" step="0.01" min="0" placeholder="€ unit." value={item.prezzoUnitario || ''}
+          onChange={e => updatePrezzoUnitario(item.id, e.target.value)}
+          style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0}} />
+        <input type="number" step="0.01" min="0" placeholder="€ tot." value={item.prezzoTotale || ''}
+          onChange={e => updatePrezzoTotale(item.id, e.target.value)}
+          style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0,fontWeight:700}} />
+        <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
+      </div>
+    );
   }
 
   const lista = data.listaSpesa || [];
@@ -1001,7 +1065,7 @@ function SpesaTab({ data, saveData }) {
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>🛒 Lista della spesa</div>
         <div style={{display:'flex',gap:'6px'}}>
-          {presi.length > 0 && <button className="btn small danger" onClick={clearChecked}>🗑 Rimuovi presi</button>}
+          {presi.length > 0 && <button className="btn small danger" onClick={clearChecked}>🗑 Svuota senza registrare</button>}
           <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕' : '+ Aggiungi'}</button>
         </div>
       </div>
@@ -1015,9 +1079,17 @@ function SpesaTab({ data, saveData }) {
                 onChange={e => setForm(f => ({...f, nome: e.target.value}))}
                 onKeyDown={e => e.key === 'Enter' && add()} />
             </div>
-            <div className="form-group" style={{maxWidth:'70px'}}>
+            <div className="form-group" style={{maxWidth:'60px'}}>
               <label>Qtà</label>
               <input type="text" inputMode="numeric" pattern="[0-9]*" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
+            </div>
+            <div className="form-group" style={{maxWidth:'85px'}}>
+              <label>€ unit.</label>
+              <input type="number" step="0.01" min="0" placeholder="0.00" value={form.prezzoUnitario} onChange={e => handleFormUnitChange(e.target.value)} />
+            </div>
+            <div className="form-group" style={{maxWidth:'85px'}}>
+              <label>€ tot.</label>
+              <input type="number" step="0.01" min="0" placeholder="0.00" value={form.prezzoTotale} onChange={e => setForm(f => ({...f, prezzoTotale: e.target.value}))} />
             </div>
           </div>
           <div className="form-row">
@@ -1044,29 +1116,28 @@ function SpesaTab({ data, saveData }) {
       {Object.entries(bycat).map(([cat, items]) => (
         <div key={cat} style={{marginBottom:'14px'}}>
           <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>{cat}</div>
-          {items.map(item => (
-            <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
-              <input type="checkbox" checked={item.checked} onChange={() => toggle(item.id)} />
-              <span style={{flex:1}}>{item.nome}</span>
-              {item.qta && item.qta !== '1' && (
-                <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'14px',padding:'3px 11px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
-              )}
-              <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
-            </div>
-          ))}
+          {items.map(item => renderItem(item))}
         </div>
       ))}
 
+      {daPrendere.length > 0 && (
+        <div style={{textAlign:'right',fontSize:'13px',fontWeight:700,color:'var(--text2)',padding:'2px 4px 12px'}}>
+          Totale da prendere (stima): {formatEuro(daPrendere.reduce((a, i) => a + Number(i.prezzoTotale || 0), 0))}
+        </div>
+      )}
+
       {presi.length > 0 && (
         <div style={{marginTop:'8px'}}>
-          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px'}}>✓ Già presi</div>
-          {presi.map(item => (
-            <div className="spesa-lista-item checked" key={item.id}>
-              <input type="checkbox" checked={true} onChange={() => toggle(item.id)} />
-              <span style={{flex:1}}>{item.nome}</span>
-              <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
+            <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em'}}>✓ Già presi</div>
+            <div style={{fontSize:'13px',fontWeight:700,color:'var(--green)'}}>
+              Totale: {formatEuro(presi.reduce((a, i) => a + Number(i.prezzoTotale || 0), 0))}
             </div>
-          ))}
+          </div>
+          {presi.map(item => renderItem(item))}
+          <button className="btn primary" style={{marginTop:'10px',width:'100%',background:'var(--green)',borderColor:'var(--green)'}} onClick={registraSpesa}>
+            💾 Registra spesa nel Budget e svuota lista
+          </button>
         </div>
       )}
     </div>
