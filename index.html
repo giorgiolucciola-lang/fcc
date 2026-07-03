@@ -212,6 +212,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
 .scad-dot.verde { background: var(--green); }
 .scad-dot.arancio { background: var(--orange); }
 .scad-dot.rosso { background: var(--red); }
+.scad-dot.giallo { background: #f4d03f; box-shadow: 0 0 0 2px rgba(244,208,63,0.35); }
 .scad-info { flex: 1 1 150px; min-width: 0; }
 .scad-name { font-size: 14px; font-weight: 600; }
 .scad-date { font-size: 12px; color: var(--text3); }
@@ -377,6 +378,12 @@ function scadenzaColor(dateStr) {
   if (diff <= 5) return 'arancio';
   return 'verde';
 }
+// Verifica se una data (yyyy-mm-dd) cade nel mese solare corrente (oggi)
+function isMeseCorrente(dateStr) {
+  const [y, m] = dateStr.split('-').map(Number);
+  const oggi = new Date();
+  return y === oggi.getFullYear() && m === (oggi.getMonth() + 1);
+}
 function addMonthsToDateStr(dateStr, n) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
@@ -463,6 +470,33 @@ function App() {
     }
   }
 
+  // ── Aggiornamenti "sicuri" per gli elenchi critici (spese, entrate, scadenze, listaSpesa) ──
+  // A differenza di saveData (che riscrive TUTTO il documento con i dati che l'app ha in quel
+  // momento), queste funzioni usano le operazioni atomiche di Firebase arrayUnion/arrayRemove:
+  // agiscono solo sulla singola voce toccata, quindi due salvataggi ravvicinati (anche da
+  // dispositivi diversi, anche offline) non possono più cancellarsi a vicenda.
+  async function applyUpdate(updateObj) {
+    if (!user || !Object.keys(updateObj).length) return;
+    setSyncing(true);
+    try {
+      await db.collection('users').doc(user.uid).update(updateObj);
+    } finally {
+      setSyncing(false);
+    }
+  }
+  function addItems(field, items) {
+    if (!items || !items.length) return Promise.resolve();
+    return applyUpdate({ [field]: firebase.firestore.FieldValue.arrayUnion(...items) });
+  }
+  function removeItems(field, items) {
+    if (!items || !items.length) return Promise.resolve();
+    return applyUpdate({ [field]: firebase.firestore.FieldValue.arrayRemove(...items) });
+  }
+  async function updateItem(field, oldItem, newItem) {
+    await removeItems(field, [oldItem]);
+    await addItems(field, [newItem]);
+  }
+
   function login() { auth.signInWithPopup(provider); }
   function logout() { auth.signOut(); setData(null); }
 
@@ -514,9 +548,9 @@ function App() {
         </div>
       </nav>
 
-      {tab === 'budget' && <BudgetTab data={data} saveData={saveData} />}
-      {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} />}
-      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} />}
+      {tab === 'budget' && <BudgetTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} />}
+      {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} />}
+      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} />}
       {tab === 'report' && <ReportTab data={data} />}
       {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} />}
     </div>
@@ -524,7 +558,7 @@ function App() {
 }
 
 // ── BUDGET TAB ─────────────────────────────────────────────────────────────────
-function BudgetTab({ data, saveData }) {
+function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -602,12 +636,12 @@ function BudgetTab({ data, saveData }) {
   function addSpesa() {
     if (!form.desc || !form.amount) return;
     const s = { id: Date.now(), desc: form.desc, amount: Number(form.amount), cat: form.cat || 'Altro', subcat: form.subcat || '', date: form.date };
-    saveData({ spese: [...(data.spese || []), s] });
+    addItems('spese', [s]);
     setForm({ desc: '', amount: '', cat: '', subcat: '', date: localDateStr() });
     setShowAddSpesa(false);
   }
-  function deleteSpesa(id) {
-    saveData({ spese: (data.spese || []).filter(s => s.id !== id) });
+  function deleteSpesa(item) {
+    removeItems('spese', [item]);
   }
   function startEditSpesa(s) {
     setEditSpesaId(s.id);
@@ -616,24 +650,21 @@ function BudgetTab({ data, saveData }) {
   function cancelEditSpesa() {
     setEditSpesaId(null);
   }
-  function saveEditSpesa(id) {
+  function saveEditSpesa(oldItem) {
     if (!editSpesaForm.desc || !editSpesaForm.amount) return;
-    saveData({
-      spese: (data.spese || []).map(s => s.id === id
-        ? { ...s, desc: editSpesaForm.desc, amount: Number(editSpesaForm.amount), cat: editSpesaForm.cat || 'Altro', subcat: editSpesaForm.subcat || '', date: editSpesaForm.date }
-        : s)
-    });
+    const newItem = { ...oldItem, desc: editSpesaForm.desc, amount: Number(editSpesaForm.amount), cat: editSpesaForm.cat || 'Altro', subcat: editSpesaForm.subcat || '', date: editSpesaForm.date };
+    updateItem('spese', oldItem, newItem);
     setEditSpesaId(null);
   }
   function addEntrata() {
     if (!formE.desc || !formE.amount) return;
     const e = { id: Date.now(), desc: formE.desc, amount: Number(formE.amount), date: formE.date };
-    saveData({ entrate: [...(data.entrate || []), e] });
+    addItems('entrate', [e]);
     setFormE({ desc: '', amount: '', date: localDateStr() });
     setShowAddEntrata(false);
   }
-  function deleteEntrata(id) {
-    saveData({ entrate: (data.entrate || []).filter(e => e.id !== id) });
+  function deleteEntrata(item) {
+    removeItems('entrate', [item]);
   }
 
   return (
@@ -706,7 +737,7 @@ function BudgetTab({ data, saveData }) {
               <div className="spesa-cat">{formatDataIT(e.date)}</div>
             </div>
             <div className="spesa-amount">{formatEuro(e.amount)}</div>
-            <button className="spesa-delete" onClick={() => deleteEntrata(e.id)}>🗑</button>
+            <button className="spesa-delete" onClick={() => deleteEntrata(e)}>🗑</button>
           </div>
         ))}
       </div>
@@ -791,7 +822,7 @@ function BudgetTab({ data, saveData }) {
                   </div>
                   <div className="spesa-amount">{formatEuro(s.amount)}</div>
                   <button className="btn small" onClick={() => startEditSpesa(s)}>✏️</button>
-                  <button className="spesa-delete" onClick={() => deleteSpesa(s.id)}>🗑</button>
+                  <button className="spesa-delete" onClick={() => deleteSpesa(s)}>🗑</button>
                 </div>
                 {editSpesaId === s.id && (
                   <div className="add-spesa-form" style={{marginTop:'-4px',marginBottom:'10px'}}>
@@ -830,7 +861,7 @@ function BudgetTab({ data, saveData }) {
                       </div>
                     )}
                     <div style={{display:'flex',gap:'8px'}}>
-                      <button className="btn primary" onClick={() => saveEditSpesa(s.id)}>💾 Salva modifica</button>
+                      <button className="btn primary" onClick={() => saveEditSpesa(s)}>💾 Salva modifica</button>
                       <button className="btn" onClick={cancelEditSpesa}>✕ Annulla</button>
                     </div>
                   </div>
@@ -845,7 +876,7 @@ function BudgetTab({ data, saveData }) {
 }
 
 // ── SCADENZE TAB ───────────────────────────────────────────────────────────────
-function ScadenzeTab({ data, saveData }) {
+function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1' });
   const [editId, setEditId] = useState(null);
@@ -870,18 +901,19 @@ function ScadenzeTab({ data, saveData }) {
     if (form.tipo === 'fissa' || form.tipo === 'periodica') {
       nuove = nuove.concat(generaOccorrenze(base, 12));
     }
-    saveData({ scadenze: [...(data.scadenze || []), ...nuove] });
+    addItems('scadenze', nuove);
     setForm({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1' });
     setShow(false);
   }
-  function togglePagato(id) {
-    saveData({ scadenze: (data.scadenze || []).map(s => s.id === id ? {...s, pagato: !s.pagato} : s) });
+  function togglePagato(item) {
+    updateItem('scadenze', item, { ...item, pagato: !item.pagato });
   }
-  function del(id) {
-    saveData({ scadenze: (data.scadenze || []).filter(s => s.id !== id) });
+  function del(item) {
+    removeItems('scadenze', [item]);
   }
   function delGruppo(gruppoId, scadenzaId) {
-    saveData({ scadenze: (data.scadenze || []).filter(s => s.id !== scadenzaId && s.gruppoId !== gruppoId && s.id !== gruppoId) });
+    const daRimuovere = (data.scadenze || []).filter(s => s.id === scadenzaId || s.gruppoId === gruppoId || s.id === gruppoId);
+    removeItems('scadenze', daRimuovere);
   }
   // Estende un gruppo ricorrente generando altre 12 occorrenze a partire dall'ultima esistente
   function estendiGruppo(gruppoId) {
@@ -890,7 +922,7 @@ function ScadenzeTab({ data, saveData }) {
     if (delGruppoList.length === 0) return;
     const ultima = [...delGruppoList].sort((a, b) => b.date.localeCompare(a.date))[0];
     const finte = generaOccorrenze({ ...ultima, id: ultima.id, date: ultima.date }, 12);
-    saveData({ scadenze: [...tutte, ...finte] });
+    addItems('scadenze', finte);
   }
 
   function startEdit(s) {
@@ -901,30 +933,23 @@ function ScadenzeTab({ data, saveData }) {
   function cancelEdit() {
     setEditId(null);
   }
-  function saveEdit(s) {
+  async function saveEdit(s) {
     if (!editForm.nome) return;
     const gruppoKey = s.gruppoId || s.id; // id del gruppo "padre"
     if (editScope === 'gruppo' && s.ricorrente) {
       // Applica nome + importo a tutte le occorrenze future non pagate dello stesso gruppo
       // (la data resta individuale per ciascuna rata, non viene toccata)
-      saveData({
-        scadenze: (data.scadenze || []).map(item => {
-          const stessoGruppo = item.id === gruppoKey || item.gruppoId === gruppoKey;
-          if (stessoGruppo && !item.pagato) {
-            return { ...item, nome: editForm.nome, amount: Number(editForm.amount) };
-          }
-          return item;
-        })
+      const daAggiornare = (data.scadenze || []).filter(item => {
+        const stessoGruppo = item.id === gruppoKey || item.gruppoId === gruppoKey;
+        return stessoGruppo && !item.pagato;
       });
+      const aggiornate = daAggiornare.map(item => ({ ...item, nome: editForm.nome, amount: Number(editForm.amount) }));
+      await removeItems('scadenze', daAggiornare);
+      await addItems('scadenze', aggiornate);
     } else {
       // Solo questa singola rata
-      saveData({
-        scadenze: (data.scadenze || []).map(item =>
-          item.id === s.id
-            ? { ...item, nome: editForm.nome, amount: Number(editForm.amount), date: editForm.date }
-            : item
-        )
-      });
+      const newItem = { ...s, nome: editForm.nome, amount: Number(editForm.amount), date: editForm.date };
+      await updateItem('scadenze', s, newItem);
     }
     setEditId(null);
   }
@@ -959,7 +984,8 @@ function ScadenzeTab({ data, saveData }) {
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--red)'}}></span> scaduta</span>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--orange)'}}></span> da pagare (entro 5 giorni)</span>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--surface2)',border:'1px solid var(--border2)'}}></span> programmata</span>
-        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--green)'}}></span> pagata</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--green)'}}></span> pagata</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'50%',background:'#f4d03f'}}></span> scadenza di questo mese</span>
       </div>
 
       {show && (
@@ -1018,15 +1044,16 @@ function ScadenzeTab({ data, saveData }) {
         return (
         <div key={s.id}>
           <div className={`scad-item${s.pagato ? ' pagato' : ''}`}>
+            {isMeseCorrente(s.date) && !s.pagato && <span className="scad-dot giallo" title="Scadenza di questo mese"></span>}
             <div className="scad-info">
               <div className="scad-name">{s.nome} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
               <div className="scad-date">{new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</div>
             </div>
             <div className="scad-actions">
               <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-              <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s.id)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
+              <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
               <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
-              <button className="btn small danger" onClick={() => del(s.id)}>🗑</button>
+              <button className="btn small danger" onClick={() => del(s)}>🗑</button>
             </div>
           </div>
           {editId === s.id && (
@@ -1074,7 +1101,7 @@ function ScadenzeTab({ data, saveData }) {
 }
 
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
-function SpesaTab({ data, saveData }) {
+function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
@@ -1095,7 +1122,7 @@ function SpesaTab({ data, saveData }) {
   function add() {
     if (!form.nome) return;
     const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false };
-    saveData({ listaSpesa: [...(data.listaSpesa || []), item] });
+    addItems('listaSpesa', [item]);
     setForm({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   }
   // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
@@ -1105,33 +1132,29 @@ function SpesaTab({ data, saveData }) {
     const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : form.prezzoTotale;
     setForm(f => ({ ...f, prezzoUnitario: val, prezzoTotale: totaleAuto }));
   }
-  function toggle(id) {
-    saveData({ listaSpesa: (data.listaSpesa || []).map(i => i.id === id ? {...i, checked: !i.checked} : i) });
+  function toggle(item) {
+    updateItem('listaSpesa', item, { ...item, checked: !item.checked });
   }
-  function del(id) {
-    saveData({ listaSpesa: (data.listaSpesa || []).filter(i => i.id !== id) });
+  function del(item) {
+    removeItems('listaSpesa', [item]);
   }
   function clearChecked() {
-    saveData({ listaSpesa: (data.listaSpesa || []).filter(i => !i.checked) });
+    removeItems('listaSpesa', presi);
   }
   // Aggiorna il prezzo unitario di un articolo e ricalcola in automatico il totale
-  function updatePrezzoUnitario(id, val) {
-    saveData({
-      listaSpesa: (data.listaSpesa || []).map(i => {
-        if (i.id !== id) return i;
-        const qtaNum = parseFloat(i.qta);
-        const unitNum = parseFloat(val);
-        const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : i.prezzoTotale;
-        return { ...i, prezzoUnitario: val, prezzoTotale: totaleAuto };
-      })
-    });
+  function updatePrezzoUnitario(item, val) {
+    const qtaNum = parseFloat(item.qta);
+    const unitNum = parseFloat(val);
+    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : item.prezzoTotale;
+    updateItem('listaSpesa', item, { ...item, prezzoUnitario: val, prezzoTotale: totaleAuto });
   }
   // Aggiorna il prezzo totale direttamente (utile per i prodotti a peso, senza prezzo unitario)
-  function updatePrezzoTotale(id, val) {
-    saveData({ listaSpesa: (data.listaSpesa || []).map(i => i.id === id ? { ...i, prezzoTotale: val } : i) });
+  function updatePrezzoTotale(item, val) {
+    updateItem('listaSpesa', item, { ...item, prezzoTotale: val });
   }
   // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
   // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
+  // (un'unica operazione atomica: aggiunge le spese e rimuove gli articoli presi insieme)
   function registraSpesa() {
     const conPrezzo = presi.filter(i => Number(i.prezzoTotale) > 0);
     const perCategoria = {};
@@ -1147,27 +1170,27 @@ function SpesaTab({ data, saveData }) {
       subcat: '',
       date: oggi,
     }));
-    saveData({
-      spese: nuoveSpese.length ? [...(data.spese || []), ...nuoveSpese] : data.spese,
-      listaSpesa: (data.listaSpesa || []).filter(i => !i.checked),
-    });
+    const updateObj = {};
+    if (nuoveSpese.length) updateObj.spese = firebase.firestore.FieldValue.arrayUnion(...nuoveSpese);
+    if (presi.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...presi);
+    if (Object.keys(updateObj).length) applyUpdate(updateObj);
   }
   // Rendering di una riga articolo (usata sia per "da prendere" che per "già presi")
   function renderItem(item) {
     return (
       <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
-        <input type="checkbox" checked={item.checked} onChange={() => toggle(item.id)} />
+        <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
         <span style={{flex:1}}>{item.nome}</span>
         {item.qta && item.qta !== '1' && (
           <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'12px',padding:'2px 8px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
         )}
         <input type="number" step="0.01" min="0" placeholder="€ unit." value={item.prezzoUnitario || ''}
-          onChange={e => updatePrezzoUnitario(item.id, e.target.value)}
+          onChange={e => updatePrezzoUnitario(item, e.target.value)}
           style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0}} />
         <input type="number" step="0.01" min="0" placeholder="€ tot." value={item.prezzoTotale || ''}
-          onChange={e => updatePrezzoTotale(item.id, e.target.value)}
+          onChange={e => updatePrezzoTotale(item, e.target.value)}
           style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0,fontWeight:700}} />
-        <button className="spesa-delete" onClick={() => del(item.id)}>✕</button>
+        <button className="spesa-delete" onClick={() => del(item)}>✕</button>
       </div>
     );
   }
@@ -1379,6 +1402,11 @@ function ReportTab({ data }) {
             )}
           </div>
         ))}
+        {totale > 0 && (
+          <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
+            <span>Totale movimenti</span><span style={{color:'var(--red)'}}>{formatEuro(totale)}</span>
+          </div>
+        )}
       </div>
 
       <div className="card">
