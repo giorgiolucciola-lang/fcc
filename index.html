@@ -325,7 +325,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -962,6 +962,13 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
     setPayDateId(null);
     setPayDate('');
   }
+  // Apre lo stesso riquadro "conferma pagamento" ma per CORREGGERE la data di una
+  // scadenza già segnata come pagata, precompilando la data attualmente salvata
+  // (invece di oggi). Non serve riaprire e richiudere la scadenza.
+  function correggiDataPagamento(item) {
+    setPayDate(item.dataPagamento || localDateStr());
+    setPayDateId(item.id);
+  }
   function del(item) {
     removeItems('scadenze', [item]);
   }
@@ -1109,7 +1116,17 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
               <div className="scad-name">{s.nome} {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
               <div className="scad-date">
                 {new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}
-                {s.pagato && s.dataPagamento && <span style={{color:'var(--green)'}}> · Pagata il {formatDataIT(s.dataPagamento)}</span>}
+                {s.pagato && s.dataPagamento && (
+                  <span style={{color:'var(--green)'}}>
+                    {' '}· Pagata il {formatDataIT(s.dataPagamento)}
+                    <button
+                      className="btn small"
+                      style={{marginLeft:'6px',padding:'1px 6px',fontSize:'11px',verticalAlign:'middle'}}
+                      title="Correggi la data di pagamento"
+                      onClick={() => correggiDataPagamento(s)}
+                    >✏️</button>
+                  </span>
+                )}
               </div>
             </div>
             <div className="scad-actions">
@@ -1121,12 +1138,14 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
           </div>
           {payDateId === s.id && (
             <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'10px',flexWrap:'wrap'}}>
-              <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 140px'}}>Quando è stata pagata <strong>{s.nome}</strong>?</span>
+              <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 140px'}}>
+                {s.pagato ? <>Correggi la data di pagamento di <strong>{s.nome}</strong></> : <>Quando è stata pagata <strong>{s.nome}</strong>?</>}
+              </span>
               <div className="form-group" style={{maxWidth:'160px'}}>
                 <label>Data pagamento</label>
                 <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
               </div>
-              <button className="btn primary small" onClick={() => confermaPagamento(s)}>✓ Conferma</button>
+              <button className="btn primary small" onClick={() => confermaPagamento(s)}>✓ {s.pagato ? 'Salva' : 'Conferma'}</button>
               <button className="btn small" onClick={annullaPagamento}>✕ Annulla</button>
             </div>
           )}
