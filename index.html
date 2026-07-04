@@ -438,10 +438,17 @@ function App() {
   useEffect(() => {
     if (!user) return;
     const ref = db.collection('users').doc(user.uid);
-    const unsub = ref.onSnapshot(snap => {
+    // includeMetadataChanges: true → il listener viene richiamato anche quando
+    // cambia solo la "provenienza" dello snapshot (cache locale → server),
+    // anche se i dati non sono cambiati. Serve per poter distinguere con
+    // certezza un documento davvero inesistente da un semplice "non ancora
+    // arrivato dal server" (es. dopo aver svuotato la cache o reinstallato la PWA).
+    const unsub = ref.onSnapshot({ includeMetadataChanges: true }, snap => {
       if (snap.exists) {
         setData(snap.data());
-      } else {
+      } else if (!snap.metadata.fromCache) {
+        // Il server ha confermato che il documento non esiste davvero:
+        // solo ora è sicuro creare i dati iniziali vuoti.
         const init = {
           spese: [],
           entrate: [],
@@ -454,6 +461,12 @@ function App() {
         ref.set(init);
         setData(init);
       }
+      // else: lo snapshot "vuoto" arriva dalla cache locale, non dal server.
+      // Non facciamo nulla e aspettiamo la conferma reale, per non rischiare
+      // di sovrascrivere dati veri già presenti sul server.
+    }, () => {
+      // Errore di lettura (es. offline senza cache locale): non facciamo nulla,
+      // resta la schermata di caricamento invece di creare dati vuoti.
     });
     return unsub;
   }, [user]);
