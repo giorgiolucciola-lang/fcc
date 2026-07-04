@@ -1119,9 +1119,19 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const [form, setForm] = useState({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
+  // Articolo per cui è aperto il riquadro "prezzo rapido" (flusso spunta+prezzo in un solo tocco)
+  const [quickPriceId, setQuickPriceId] = useState(null);
+  const [quickPrice, setQuickPrice] = useState('');
+  const quickPriceInputRef = useRef(null);
 
   // Elenco categorie robusto: se l'array è vuoto o assente, usa i default
   const catList = (data.categorieLista && data.categorieLista.length) ? data.categorieLista : DEFAULT_SPESA_CATS;
+
+  useEffect(() => {
+    if (quickPriceId && quickPriceInputRef.current) {
+      quickPriceInputRef.current.focus();
+    }
+  }, [quickPriceId]);
 
   function addCatInline() {
     if (!newCatInline.trim()) return;
@@ -1146,7 +1156,38 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     setForm(f => ({ ...f, prezzoUnitario: val, prezzoTotale: totaleAuto }));
   }
   function toggle(item) {
-    updateItem('listaSpesa', item, { ...item, checked: !item.checked });
+    if (item.checked) {
+      // Da "già preso" a "da prendere": semplice riapertura, nessun prezzo da chiedere
+      updateItem('listaSpesa', item, { ...item, checked: false });
+      return;
+    }
+    // Da "da prendere" a "preso": se ha già un prezzo, spunta subito senza chiedere altro.
+    // Altrimenti apre il riquadro "prezzo rapido" per inserirlo e confermare in un solo tocco.
+    if (Number(item.prezzoTotale) > 0) {
+      updateItem('listaSpesa', item, { ...item, checked: true });
+    } else {
+      setQuickPrice('');
+      setQuickPriceId(item.id);
+    }
+  }
+  // Conferma del riquadro "prezzo rapido": salva il prezzo (se inserito) e spunta l'articolo, in un solo aggiornamento
+  function confermaQuickPrice(item) {
+    const qtaNum = parseFloat(item.qta);
+    const unitNum = parseFloat(quickPrice);
+    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : (quickPrice || item.prezzoTotale || '');
+    updateItem('listaSpesa', item, { ...item, prezzoUnitario: quickPrice || item.prezzoUnitario, prezzoTotale: totaleAuto, checked: true });
+    setQuickPriceId(null);
+    setQuickPrice('');
+  }
+  // Spunta senza inserire un prezzo (utile se non lo conosci ancora, lo aggiungerai dopo tra i "Già presi")
+  function confermaSenzaPrice(item) {
+    updateItem('listaSpesa', item, { ...item, checked: true });
+    setQuickPriceId(null);
+    setQuickPrice('');
+  }
+  function annullaQuickPrice() {
+    setQuickPriceId(null);
+    setQuickPrice('');
   }
   function del(item) {
     removeItems('listaSpesa', [item]);
@@ -1170,6 +1211,14 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // (un'unica operazione atomica: aggiunge le spese e rimuove gli articoli presi insieme)
   function registraSpesa() {
     const conPrezzo = presi.filter(i => Number(i.prezzoTotale) > 0);
+    const senzaPrezzo = presi.filter(i => !(Number(i.prezzoTotale) > 0));
+    if (senzaPrezzo.length > 0) {
+      const nomi = senzaPrezzo.map(i => i.nome).join(', ');
+      const ok = window.confirm(
+        `${senzaPrezzo.length} articolo${senzaPrezzo.length > 1 ? 'i' : ''} senza prezzo (${nomi}) ${senzaPrezzo.length > 1 ? 'non verranno registrati' : 'non verrà registrato'} nel Budget.\n\nProcedere comunque?`
+      );
+      if (!ok) return;
+    }
     const perCategoria = {};
     for (const item of conPrezzo) {
       perCategoria[item.cat] = (perCategoria[item.cat] || 0) + Number(item.prezzoTotale);
@@ -1191,19 +1240,37 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // Rendering di una riga articolo (usata sia per "da prendere" che per "già presi")
   function renderItem(item) {
     return (
-      <div className={`spesa-lista-item${item.checked?' checked':''}`} key={item.id}>
-        <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
-        <span style={{flex:1}}>{item.nome}</span>
-        {item.qta && item.qta !== '1' && (
-          <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'12px',padding:'2px 8px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
+      <div key={item.id}>
+        <div className={`spesa-lista-item${item.checked?' checked':''}`}>
+          <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
+          <span style={{flex:1, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>{item.nome}</span>
+          {item.qta && item.qta !== '1' && (
+            <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'12px',padding:'2px 8px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
+          )}
+          <input type="number" step="0.01" min="0" placeholder="€ unit." value={item.prezzoUnitario || ''}
+            onChange={e => updatePrezzoUnitario(item, e.target.value)}
+            style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0}} />
+          <input type="number" step="0.01" min="0" placeholder="€ tot." value={item.prezzoTotale || ''}
+            onChange={e => updatePrezzoTotale(item, e.target.value)}
+            style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0,fontWeight:700}} />
+          <button className="spesa-delete" onClick={() => del(item)}>✕</button>
+        </div>
+        {quickPriceId === item.id && (
+          <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'6px',flexWrap:'wrap'}}>
+            <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
+            <input
+              ref={quickPriceInputRef}
+              type="number" inputMode="decimal" step="0.01" min="0" placeholder="€ unit."
+              value={quickPrice}
+              onChange={e => setQuickPrice(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confermaQuickPrice(item)}
+              style={{width:'80px',padding:'7px 8px',fontSize:'14px'}}
+            />
+            <button className="btn primary small" onClick={() => confermaQuickPrice(item)}>✓ Preso</button>
+            <button className="btn small" onClick={() => confermaSenzaPrice(item)}>Senza prezzo</button>
+            <button className="btn small" onClick={annullaQuickPrice}>✕ Annulla</button>
+          </div>
         )}
-        <input type="number" step="0.01" min="0" placeholder="€ unit." value={item.prezzoUnitario || ''}
-          onChange={e => updatePrezzoUnitario(item, e.target.value)}
-          style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0}} />
-        <input type="number" step="0.01" min="0" placeholder="€ tot." value={item.prezzoTotale || ''}
-          onChange={e => updatePrezzoTotale(item, e.target.value)}
-          style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0,fontWeight:700}} />
-        <button className="spesa-delete" onClick={() => del(item)}>✕</button>
       </div>
     );
   }
