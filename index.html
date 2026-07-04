@@ -55,7 +55,8 @@ nav {
   padding: 10px 16px;
   max-width: 700px; margin: 0 auto;
 }
-.nav-title { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
+.nav-title { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.3px; display: flex; align-items: baseline; gap: 6px; }
+.nav-version { color: rgba(255,255,255,0.55); font-size: 11px; font-weight: 500; letter-spacing: 0.2px; }
 .nav-user { color: rgba(255,255,255,0.85); font-size: 13px; display: flex; align-items: center; gap: 8px; }
 .nav-tabs {
   display: flex; overflow-x: auto;
@@ -315,6 +316,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); backgro
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
 
+// Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
+const APP_VERSION = "v9";
+
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
 // Le trovi su: console.firebase.google.com → Il tuo progetto → Impostazioni → Le tue app
@@ -541,7 +545,7 @@ function App() {
     <div>
       <nav>
         <div className="nav-top">
-          <div className="nav-title">💜 Family CC</div>
+          <div className="nav-title">💜 Family CC <span className="nav-version">{APP_VERSION}</span></div>
           <div className="nav-user">
             <span style={{display:'none',fontSize:'12px'}}>{user.displayName?.split(' ')[0]}</span>
             <button className="print-btn" onClick={() => window.print()} title="Stampa la scheda corrente">
