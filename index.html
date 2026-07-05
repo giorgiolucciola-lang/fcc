@@ -325,7 +325,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v12";
+const APP_VERSION = "v15";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -402,22 +402,63 @@ function addMonthsToDateStr(dateStr, n) {
   date.setMonth(date.getMonth() + n);
   return localDateStr(date);
 }
-// Genera occorrenze future per una scadenza ricorrente (fissa mensile o periodica multi-mese)
+// Aggiunge un numero di giorni a una data (yyyy-mm-dd)
+function addDaysToDateStr(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + n);
+  return localDateStr(date);
+}
+// Ultimo giorno del mese "m" (1-12) dell'anno "y"
+function lastDayOfMonthStr(y, m) {
+  const date = new Date(y, m, 0); // giorno 0 del mese successivo = ultimo giorno del mese corrente
+  return localDateStr(date);
+}
+// Legge la frequenza di una scadenza in formato unificato { unita, valore, fineMese },
+// leggendo sia il formato nuovo (unitaRicorrenza/intervalloValore/fineMese) sia il vecchio
+// formato pre-v14 (tipoRicorrenza 'fissa'|'periodica' + intervalloMesi), per compatibilità
+// con le scadenze già create in passato.
+function normalizzaRicorrenza(s) {
+  if (s.unitaRicorrenza) {
+    return { unita: s.unitaRicorrenza, valore: Number(s.intervalloValore || 1), fineMese: !!s.fineMese };
+  }
+  if (s.tipoRicorrenza === 'periodica') return { unita: 'mesi', valore: Number(s.intervalloMesi || 1), fineMese: false };
+  return { unita: 'mesi', valore: 1, fineMese: false }; // 'fissa' oppure assente
+}
+// Calcola la data risultante spostando "valore" unità (giorni o mesi) da una data di partenza.
+// Se fineMese è true (solo per unità "mesi"), il risultato viene sempre riportato
+// all'ultimo giorno del mese target, calcolato su anno/mese (ignorando il giorno di
+// partenza) per evitare il bug di overflow di JavaScript: sommare mesi a un giorno alto
+// (es. 31 gennaio + 1 mese) farebbe "sforare" al mese successivo invece di fermarsi a febbraio.
+function addIntervalloADataStr(dateStr, unita, valore, fineMese) {
+  if (unita === 'giorni') return addDaysToDateStr(dateStr, valore);
+  if (fineMese) {
+    const [y, m] = dateStr.split('-').map(Number);
+    const totale = (m - 1) + valore;
+    const targetYear = y + Math.floor(totale / 12);
+    const targetMonth = ((totale % 12) + 12) % 12 + 1;
+    return lastDayOfMonthStr(targetYear, targetMonth);
+  }
+  return addMonthsToDateStr(dateStr, valore);
+}
+// Genera occorrenze future per una scadenza ricorrente, qualunque sia la frequenza
+// (ogni N giorni, ogni N mesi, con o senza "sempre fine mese").
 // Se la scadenza è "numerata", ogni occorrenza riceve un numero di rata progressivo
 // (rataNum), a partire dal numero di rata della scadenza di origine.
 function generaOccorrenze(scadenza, count = 12) {
   const occorrenze = [];
   const rataBase = Number(scadenza.rataNum || 1);
+  const { unita, valore, fineMese } = normalizzaRicorrenza(scadenza);
   for (let i = 1; i <= count; i++) {
-    const intervallo = scadenza.tipoRicorrenza === 'fissa' ? 1 : Number(scadenza.intervalloMesi || 1);
     occorrenze.push({
       id: scadenza.id + i, // id derivato, univoco e stabile
       nome: scadenza.nome,
       amount: scadenza.amount,
-      date: addMonthsToDateStr(scadenza.date, intervallo * i),
+      date: addIntervalloADataStr(scadenza.date, unita, valore * i, fineMese),
       ricorrente: true,
-      tipoRicorrenza: scadenza.tipoRicorrenza,
-      intervalloMesi: scadenza.intervalloMesi || null,
+      unitaRicorrenza: unita,
+      intervalloValore: valore,
+      fineMese: fineMese,
       gruppoId: scadenza.id,
       pagato: false,
       numerata: !!scadenza.numerata,
@@ -908,9 +949,11 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
 // ── SCADENZE TAB ───────────────────────────────────────────────────────────────
 function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1', numera: false });
+  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false });
   const [editId, setEditId] = useState(null);
-  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '' });
+  // tipo/unita/intervallo/fineMese servono per CORREGGERE la frequenza di un gruppo
+  // ricorrente creato per errore (es. scelto "ogni mese" invece di "ogni 3 mesi")
+  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '', tipo: 'ricorrente', unita: 'mesi', intervallo: '1', fineMese: false });
   const [editScope, setEditScope] = useState('singola'); // 'singola' | 'gruppo'
   // Riquadro "conferma pagamento": chiede la data effettiva di pagamento (default oggi)
   // prima di segnare una scadenza come pagata, così lo storico resta corretto anche
@@ -921,26 +964,35 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
   function add() {
     if (!form.nome || !form.date) return;
     const baseId = Date.now();
-    const ricorrente = form.tipo !== 'singola';
+    const ricorrente = form.tipo === 'ricorrente';
+    const fineMese = ricorrente && form.unita === 'mesi' && !!form.fineMese;
+    // Se "sempre fine mese" è attivo, anche la prima scadenza viene riportata
+    // all'ultimo giorno del suo mese, per coerenza con le occorrenze successive
+    let dataIniziale = form.date;
+    if (fineMese) {
+      const [y, m] = form.date.split('-').map(Number);
+      dataIniziale = lastDayOfMonthStr(y, m);
+    }
     const base = {
       id: baseId,
       nome: form.nome,
       amount: Number(form.amount),
-      date: form.date,
+      date: dataIniziale,
       pagato: false,
-      tipoRicorrenza: form.tipo === 'singola' ? null : (form.tipo === 'fissa' ? 'fissa' : 'periodica'),
-      intervalloMesi: form.tipo === 'periodica' ? Number(form.intervalloMesi || 1) : null,
-      gruppoId: null,
       ricorrente,
+      unitaRicorrenza: ricorrente ? form.unita : null,
+      intervalloValore: ricorrente ? Number(form.intervallo || 1) : null,
+      fineMese,
+      gruppoId: null,
       numerata: ricorrente && !!form.numera,
       rataNum: (ricorrente && form.numera) ? 1 : null,
     };
     let nuove = [base];
-    if (form.tipo === 'fissa' || form.tipo === 'periodica') {
+    if (ricorrente) {
       nuove = nuove.concat(generaOccorrenze(base, 12));
     }
     addItems('scadenze', nuove);
-    setForm({ nome: '', amount: '', date: '', tipo: 'singola', intervalloMesi: '1', numera: false });
+    setForm({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false });
     setShow(false);
   }
   // Apre il riquadro "conferma pagamento" (con data odierna precompilata) quando si segna
@@ -987,8 +1039,17 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
   }
 
   function startEdit(s) {
+    const norm = normalizzaRicorrenza(s);
     setEditId(s.id);
-    setEditForm({ nome: s.nome, amount: s.amount || '', date: s.date });
+    setEditForm({
+      nome: s.nome,
+      amount: s.amount || '',
+      date: s.date,
+      tipo: s.ricorrente ? 'ricorrente' : 'singola',
+      unita: norm.unita,
+      intervallo: String(norm.valore),
+      fineMese: norm.fineMese,
+    });
     setEditScope('singola');
   }
   function cancelEdit() {
@@ -998,15 +1059,60 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
     if (!editForm.nome) return;
     const gruppoKey = s.gruppoId || s.id; // id del gruppo "padre"
     if (editScope === 'gruppo' && s.ricorrente) {
-      // Applica nome + importo a tutte le occorrenze future non pagate dello stesso gruppo
-      // (la data resta individuale per ciascuna rata, non viene toccata)
-      const daAggiornare = (data.scadenze || []).filter(item => {
+      // CORREZIONE FREQUENZA: elimina questa rata e tutte le rate future NON pagate
+      // dello stesso gruppo, poi le rigenera da zero con nome/importo/data/frequenza
+      // corretti (utile se in fase di creazione è stata scelta la frequenza sbagliata).
+      // Le rate già pagate restano intatte, non vengono toccate.
+      const daRimuovere = (data.scadenze || []).filter(item => {
         const stessoGruppo = item.id === gruppoKey || item.gruppoId === gruppoKey;
         return stessoGruppo && !item.pagato;
       });
-      const aggiornate = daAggiornare.map(item => ({ ...item, nome: editForm.nome, amount: Number(editForm.amount) }));
-      await removeItems('scadenze', daAggiornare);
-      await addItems('scadenze', aggiornate);
+      await removeItems('scadenze', daRimuovere);
+
+      if (editForm.tipo === 'singola') {
+        // L'utente vuole interrompere la ricorrenza: questa rata diventa un'unica
+        // scadenza singola (nessun'altra occorrenza futura viene generata)
+        const nuovaSingola = {
+          id: Date.now(),
+          nome: editForm.nome,
+          amount: Number(editForm.amount),
+          date: editForm.date,
+          pagato: false,
+          ricorrente: false,
+          unitaRicorrenza: null,
+          intervalloValore: null,
+          fineMese: false,
+          gruppoId: null,
+          numerata: false,
+          rataNum: null,
+        };
+        await addItems('scadenze', [nuovaSingola]);
+      } else {
+        const fineMese = editForm.unita === 'mesi' && !!editForm.fineMese;
+        let dataIniziale = editForm.date;
+        if (fineMese) {
+          const [y, m] = editForm.date.split('-').map(Number);
+          dataIniziale = lastDayOfMonthStr(y, m);
+        }
+        // Nuovo id (Date.now()) invece di riusare gruppoKey: evita qualunque collisione
+        // con gli id delle rate già pagate rimaste (che seguono lo schema gruppoKey+n)
+        const nuovaBase = {
+          id: Date.now(),
+          nome: editForm.nome,
+          amount: Number(editForm.amount),
+          date: dataIniziale,
+          pagato: false,
+          ricorrente: true,
+          unitaRicorrenza: editForm.unita,
+          intervalloValore: Number(editForm.intervallo || 1),
+          fineMese,
+          gruppoId: null,
+          numerata: !!s.numerata,
+          rataNum: s.numerata ? (s.rataNum || 1) : null,
+        };
+        const nuoveOccorrenze = generaOccorrenze(nuovaBase, 12);
+        await addItems('scadenze', [nuovaBase, ...nuoveOccorrenze]);
+      }
     } else {
       // Solo questa singola rata
       const newItem = { ...s, nome: editForm.nome, amount: Number(editForm.amount), date: editForm.date };
@@ -1017,11 +1123,27 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
 
   const sorted = [...(data.scadenze || [])].sort((a, b) => a.date.localeCompare(b.date));
 
+  // Totale scadenze del mese corrente (quello di oggi), da mostrare in evidenza in cima alla scheda.
+  // Riusa lo stesso stile a "card" del riepilogo del Budget, così su iPhone resta leggibile
+  // (esiste già una regola CSS dedicata che rimpicciolisce queste card sotto i 480px).
+  const oggiScad = new Date();
+  const meseCorrenteLabel = monthLabel(oggiScad.getFullYear(), oggiScad.getMonth() + 1);
+  const scadenzeMeseCorrente = sorted.filter(s => isMeseCorrente(s.date));
+  const totMeseCorrente = scadenzeMeseCorrente.reduce((a, s) => a + Number(s.amount || 0), 0);
+  const totMesePagato = scadenzeMeseCorrente.filter(s => s.pagato).reduce((a, s) => a + Number(s.amount || 0), 0);
+  const totMeseDaPagare = totMeseCorrente - totMesePagato;
+
   function tipoLabel(s) {
     if (!s.ricorrente) return null;
-    if (s.tipoRicorrenza === 'fissa') return '🔄 Mensile fissa';
-    if (s.tipoRicorrenza === 'periodica') return `🔄 Ogni ${s.intervalloMesi} mesi`;
-    return '🔄 Ricorrente';
+    const { unita, valore, fineMese } = normalizzaRicorrenza(s);
+    if (unita === 'giorni') {
+      if (valore === 7) return '🔄 Ogni settimana';
+      if (valore === 14) return '🔄 Ogni 2 settimane';
+      return `🔄 Ogni ${valore} giorni`;
+    }
+    const suffisso = fineMese ? ' (fine mese)' : '';
+    if (valore === 1) return `🔄 Ogni mese${suffisso}`;
+    return `🔄 Ogni ${valore} mesi${suffisso}`;
   }
 
   // Stato unificato: testo + colore del pulsante, in base a pagato/scadenza
@@ -1039,6 +1161,24 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>📅 Scadenze</div>
         <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕ Annulla' : '+ Aggiungi'}</button>
+      </div>
+
+      <div className="summary-grid">
+        <div className="summary-card uscite">
+          <div className="label">Da pagare</div>
+          <div className="amount">{formatEuro(totMeseDaPagare)}</div>
+        </div>
+        <div className="summary-card entrate">
+          <div className="label">Già pagato</div>
+          <div className="amount">{formatEuro(totMesePagato)}</div>
+        </div>
+        <div className="summary-card saldo">
+          <div className="label">Totale mese</div>
+          <div className="amount">{formatEuro(totMeseCorrente)}</div>
+        </div>
+      </div>
+      <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',marginTop:'-6px',textAlign:'center'}}>
+        Scadenze di {meseCorrenteLabel}
       </div>
 
       <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',lineHeight:'1.5'}}>
@@ -1072,25 +1212,34 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
               <label>Tipo scadenza</label>
               <select value={form.tipo} onChange={e => setForm(f => ({...f, tipo: e.target.value}))}>
                 <option value="singola">Singola (una sola data)</option>
-                <option value="fissa">Mensile fissa (ogni mese, stesso giorno)</option>
-                <option value="periodica">Periodica multi-mese (ogni N mesi)</option>
+                <option value="ricorrente">Ricorrente (si ripete nel tempo)</option>
               </select>
             </div>
-            {form.tipo === 'periodica' && (
-              <div className="form-group">
-                <label>Ogni quanti mesi</label>
-                <select value={form.intervalloMesi} onChange={e => setForm(f => ({...f, intervalloMesi: e.target.value}))}>
-                  <option value="2">2 mesi</option>
-                  <option value="3">3 mesi</option>
-                  <option value="4">4 mesi</option>
-                  <option value="6">6 mesi</option>
-                  <option value="12">12 mesi</option>
-                </select>
-              </div>
-            )}
           </div>
-          {form.tipo !== 'singola' && (
+          {form.tipo === 'ricorrente' && (
             <>
+              <div className="form-row">
+                <div className="form-group" style={{maxWidth:'110px'}}>
+                  <label>Ogni</label>
+                  <input type="number" min="1" value={form.intervallo} onChange={e => setForm(f => ({...f, intervallo: e.target.value}))} />
+                </div>
+                <div className="form-group">
+                  <label>Unità</label>
+                  <select value={form.unita} onChange={e => setForm(f => ({...f, unita: e.target.value}))}>
+                    <option value="giorni">Giorni</option>
+                    <option value="mesi">Mesi</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}}>
+                Esempi: 15 giorni = quindicinale · 1 mese = mensile · 2 mesi = bimestrale · 3 mesi = trimestrale · 4 mesi = quadrimestrale · 6 mesi = semestrale · 12 mesi = annuale
+              </div>
+              {form.unita === 'mesi' && (
+                <label style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',fontWeight:'500',marginBottom:'12px',cursor:'pointer'}}>
+                  <input type="checkbox" checked={form.fineMese} onChange={e => setForm(f => ({...f, fineMese: e.target.checked}))} style={{width:'18px',height:'18px',cursor:'pointer',accentColor:'var(--accent)'}} />
+                  Sempre l'ultimo giorno del mese (es. affitto a fine mese)
+                </label>
+              )}
               <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}}>
                 Verranno generate automaticamente le prossime 12 occorrenze. Potrai modificarle o eliminarle singolarmente.
               </div>
@@ -1161,14 +1310,12 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
                   <input type="number" step="0.01" min="0" placeholder="0.00" value={editForm.amount} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))} />
                 </div>
               </div>
-              {editScope === 'singola' && (
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Data</label>
-                    <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
-                  </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Data{editScope === 'gruppo' ? ' (di questa rata, usata come base per rigenerare le successive)' : ''}</label>
+                  <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
                 </div>
-              )}
+              </div>
               {s.ricorrente && (
                 <div className="form-row">
                   <div className="form-group">
@@ -1179,6 +1326,48 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
                     </select>
                   </div>
                 </div>
+              )}
+              {s.ricorrente && editScope === 'gruppo' && (
+                <>
+                  <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px',lineHeight:'1.5'}}>
+                    ⚠️ Se hai sbagliato la frequenza in fase di creazione, correggila qui: le rate future <strong>non pagate</strong> verranno eliminate e rigenerate con la frequenza corretta a partire dalla data sopra. Le rate già pagate non vengono toccate.
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Tipo</label>
+                      <select value={editForm.tipo} onChange={e => setEditForm(f => ({...f, tipo: e.target.value}))}>
+                        <option value="ricorrente">Ricorrente</option>
+                        <option value="singola">Interrompi ricorrenza (diventa scadenza singola)</option>
+                      </select>
+                    </div>
+                  </div>
+                  {editForm.tipo === 'ricorrente' && (
+                    <>
+                      <div className="form-row">
+                        <div className="form-group" style={{maxWidth:'110px'}}>
+                          <label>Ogni</label>
+                          <input type="number" min="1" value={editForm.intervallo} onChange={e => setEditForm(f => ({...f, intervallo: e.target.value}))} />
+                        </div>
+                        <div className="form-group">
+                          <label>Unità</label>
+                          <select value={editForm.unita} onChange={e => setEditForm(f => ({...f, unita: e.target.value}))}>
+                            <option value="giorni">Giorni</option>
+                            <option value="mesi">Mesi</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}}>
+                        Esempi: 15 giorni = quindicinale · 1 mese = mensile · 2 mesi = bimestrale · 3 mesi = trimestrale · 4 mesi = quadrimestrale · 6 mesi = semestrale · 12 mesi = annuale
+                      </div>
+                      {editForm.unita === 'mesi' && (
+                        <label style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'13px',fontWeight:'500',marginBottom:'12px',cursor:'pointer'}}>
+                          <input type="checkbox" checked={editForm.fineMese} onChange={e => setEditForm(f => ({...f, fineMese: e.target.checked}))} style={{width:'18px',height:'18px',cursor:'pointer',accentColor:'var(--accent)'}} />
+                          Sempre l'ultimo giorno del mese
+                        </label>
+                      )}
+                    </>
+                  )}
+                </>
               )}
               <div style={{display:'flex',gap:'8px'}}>
                 <button className="btn primary" onClick={() => saveEdit(s)}>💾 Salva modifica</button>
