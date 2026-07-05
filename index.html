@@ -325,7 +325,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -549,7 +549,7 @@ function App() {
   const tabs = [
     { id: 'budget', label: '💰 Budget' },
     { id: 'scadenze', label: '📅 Scadenze' },
-    { id: 'spesa', label: '🛒 Spesa' },
+    { id: 'spesa', label: '🛒 Lista della Spesa' },
     { id: 'report', label: '📊 Report' },
     { id: 'impostazioni', label: '⚙️ Impostazioni' },
   ];
