@@ -337,7 +337,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v20";
+const APP_VERSION = "v21";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1498,24 +1498,42 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function clearChecked() {
     removeItems('listaSpesa', presi);
   }
-  // Aggiorna il prezzo unitario di un articolo e ricalcola in automatico il totale
-  function updatePrezzoUnitario(item, val) {
-    const qtaNum = parseFloat(item.qta);
-    const unitNum = parseFloat(val);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : item.prezzoTotale;
-    updateItem('listaSpesa', item, { ...item, prezzoUnitario: val, prezzoTotale: totaleAuto });
+  // ── BOZZE LOCALI per quantità/prezzi ──────────────────────────────────────
+  // Problema risolto: prima, ogni singolo tasto premuto in questi campi scriveva
+  // SUBITO su Firebase (rimozione + reinserimento dell'articolo). Digitando in
+  // fretta un numero con la virgola, il giro di andata/ritorno col database a
+  // volte "perdeva" l'ultima cifra digitata (es. i decimali del prezzo).
+  // Ora invece: mentre scrivi, il valore resta solo in memoria locale (istantaneo,
+  // nessuna cifra persa); il salvataggio su Firebase avviene solo quando esci dal
+  // campo (tocchi altrove / chiudi la tastiera) o premi Invio.
+  const [drafts, setDrafts] = useState({});
+  function draftVal(item, field) {
+    const d = drafts[item.id];
+    if (d && d[field] !== undefined) return d[field];
+    return item[field] || (field === 'qta' ? '1' : '');
   }
-  // Aggiorna il prezzo totale direttamente (utile per i prodotti a peso, senza prezzo unitario)
-  function updatePrezzoTotale(item, val) {
-    updateItem('listaSpesa', item, { ...item, prezzoTotale: val });
-  }
-  // Aggiorna la quantità di un articolo (anche già in lista, es. al supermercato) e ricalcola
-  // in automatico il prezzo totale se è presente un prezzo unitario
-  function updateQta(item, val) {
+  function setDraftQta(item, val) {
+    const unitNum = parseFloat(draftVal(item, 'prezzoUnitario'));
     const qtaNum = parseFloat(val);
-    const unitNum = parseFloat(item.prezzoUnitario);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : item.prezzoTotale;
-    updateItem('listaSpesa', item, { ...item, qta: val, prezzoTotale: totaleAuto });
+    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : draftVal(item, 'prezzoTotale');
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], qta: val, prezzoTotale: totaleAuto } }));
+  }
+  function setDraftUnit(item, val) {
+    const qtaNum = parseFloat(draftVal(item, 'qta'));
+    const unitNum = parseFloat(val);
+    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : draftVal(item, 'prezzoTotale');
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoUnitario: val, prezzoTotale: totaleAuto } }));
+  }
+  function setDraftTotale(item, val) {
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoTotale: val } }));
+  }
+  // Invia a Firebase la bozza accumulata per un articolo (chiamata su blur/Invio)
+  function commitDraft(item) {
+    const d = drafts[item.id];
+    if (!d) return;
+    const newItem = { ...item, ...d };
+    updateItem('listaSpesa', item, newItem);
+    setDrafts(prev => { const p = { ...prev }; delete p[item.id]; return p; });
   }
   // Marca/smarca un articolo come pagabile con i buoni pasto (solo etichetta visiva + totale,
   // serve a Giorgio per non superare il limite giornaliero di spesa consentito dai buoni pasto).
@@ -1597,14 +1615,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <div>{item.nome}</div>
             <div className="spesa-cat">{item.cat}</div>
           </div>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={item.qta || '1'} title="Quantità"
-            onChange={e => updateQta(item, e.target.value)}
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={draftVal(item, 'qta')} title="Quantità"
+            onChange={e => setDraftQta(item, e.target.value)}
+            onBlur={() => commitDraft(item)}
+            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
             className="qta-input" />
-          <input type="number" step="0.01" min="0" placeholder="€ unit." value={item.prezzoUnitario || ''}
-            onChange={e => updatePrezzoUnitario(item, e.target.value)}
+          <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="€ unit." value={draftVal(item, 'prezzoUnitario')}
+            onChange={e => setDraftUnit(item, e.target.value)}
+            onBlur={() => commitDraft(item)}
+            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
             className="prezzo-input" />
-          <input type="number" step="0.01" min="0" placeholder="€ tot." value={item.prezzoTotale || ''}
-            onChange={e => updatePrezzoTotale(item, e.target.value)}
+          <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="€ tot." value={draftVal(item, 'prezzoTotale')}
+            onChange={e => setDraftTotale(item, e.target.value)}
+            onBlur={() => commitDraft(item)}
+            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
             className="prezzo-input tot" />
           <button
             className="btn small bp-btn"
