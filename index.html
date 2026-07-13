@@ -337,7 +337,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v19";
+const APP_VERSION = "v20";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -483,6 +483,10 @@ function generaOccorrenze(scadenza, count = 12) {
 // ── DEFAULT DATA ───────────────────────────────────────────────────────────────
 const DEFAULT_CATS = ['Casa', 'Cibo', 'Trasporti', 'Salute', 'Svago', 'Abbigliamento', 'Altro'];
 const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'Pane e Cereali', 'Bevande', 'Pulizia', 'Altro'];
+// Tappe (negozi) del giro spesa: servono a sapere quante "fermate" restano da fare
+// (es. Supermercato, Fruttivendolo, Farmacia...). Concetto separato dalla categoria
+// del prodotto: la categoria dice COSA è, la tappa dice DOVE si compra.
+const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia', 'Altro'];
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 function App() {
@@ -526,6 +530,7 @@ function App() {
           listaSpesa: [],
           categorie: DEFAULT_CATS,
           categorieLista: DEFAULT_SPESA_CATS,
+          tappeLista: DEFAULT_TAPPE,
           budgetMensile: 2000,
           buoniPasto: [],
         };
@@ -1398,16 +1403,23 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+  const [form, setForm] = useState({ nome: '', cat: '', tappa: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
+  const [newTappaInline, setNewTappaInline] = useState('');
+  const [showNewTappa, setShowNewTappa] = useState(false);
   // Articolo per cui è aperto il riquadro "prezzo rapido" (flusso spunta+prezzo in un solo tocco)
   const [quickPriceId, setQuickPriceId] = useState(null);
   const [quickPrice, setQuickPrice] = useState('');
   const quickPriceInputRef = useRef(null);
+  // Articolo per cui è aperto il riquadro "cambia tappa" (per spostarlo su un altro negozio)
+  const [tappaEditId, setTappaEditId] = useState(null);
+  const [tappaEditVal, setTappaEditVal] = useState('');
 
   // Elenco categorie robusto: se l'array è vuoto o assente, usa i default
   const catList = (data.categorieLista && data.categorieLista.length) ? data.categorieLista : DEFAULT_SPESA_CATS;
+  // Elenco tappe (negozi) robusto: se l'array è vuoto o assente, usa i default
+  const tappaList = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
 
   useEffect(() => {
     if (quickPriceId && quickPriceInputRef.current) {
@@ -1424,11 +1436,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     setShowNewCat(false);
   }
 
+  function addTappaInline() {
+    if (!newTappaInline.trim()) return;
+    const tappe = [...tappaList, newTappaInline.trim()];
+    saveData({ tappeLista: tappe });
+    setForm(f => ({ ...f, tappa: newTappaInline.trim() }));
+    setNewTappaInline('');
+    setShowNewTappa(false);
+  }
+
   function add() {
     if (!form.nome) return;
-    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
+    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', tappa: form.tappa || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
     addItems('listaSpesa', [item]);
-    setForm({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+    setForm({ nome: '', cat: '', tappa: form.tappa || '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   }
   // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
   function handleFormUnitChange(val) {
@@ -1503,6 +1524,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function toggleBuonoPasto(item) {
     updateItem('listaSpesa', item, { ...item, buonoPasto: !item.buonoPasto });
   }
+  // Apre il riquadro per cambiare la tappa (negozio) di un articolo già in lista
+  function apriCambiaTappa(item) {
+    setTappaEditVal(item.tappa || 'Altro');
+    setTappaEditId(item.id);
+  }
+  function confermaCambiaTappa(item) {
+    updateItem('listaSpesa', item, { ...item, tappa: tappaEditVal || 'Altro' });
+    setTappaEditId(null);
+    setTappaEditVal('');
+  }
+  function annullaCambiaTappa() {
+    setTappaEditId(null);
+    setTappaEditVal('');
+  }
   // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
   // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
   // (un'unica operazione atomica: aggiunge le spese e rimuove gli articoli presi insieme)
@@ -1558,7 +1593,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         <div className={`spesa-lista-item${item.checked?' checked':''}`}
           style={bp ? {background:'var(--salmon-bg)', borderColor:'var(--salmon-border)'} : {}}>
           <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
-          <span style={{flex:1, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>{item.nome}</span>
+          <div style={{flex:1, minWidth:0, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>
+            <div>{item.nome}</div>
+            <div className="spesa-cat">{item.cat}</div>
+          </div>
           <input type="text" inputMode="numeric" pattern="[0-9]*" value={item.qta || '1'} title="Quantità"
             onChange={e => updateQta(item, e.target.value)}
             className="qta-input" />
@@ -1570,12 +1608,27 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             className="prezzo-input tot" />
           <button
             className="btn small bp-btn"
+            title="Cambia tappa (negozio)"
+            onClick={() => apriCambiaTappa(item)}
+          >📍</button>
+          <button
+            className="btn small bp-btn"
             title={bp ? 'Pagabile con buoni pasto (tocca per togliere)' : 'Segna come pagabile con buoni pasto'}
             onClick={() => toggleBuonoPasto(item)}
             style={bp ? {background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff'} : {}}
           >🍱</button>
           <button className="spesa-delete" onClick={() => del(item)}>✕</button>
         </div>
+        {tappaEditId === item.id && (
+          <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'6px',flexWrap:'wrap'}}>
+            <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Sposta <strong>{item.nome}</strong> alla tappa:</span>
+            <select value={tappaEditVal} onChange={e => setTappaEditVal(e.target.value)} style={{maxWidth:'160px'}}>
+              {tappaList.map(t => <option key={t}>{t}</option>)}
+            </select>
+            <button className="btn primary small" onClick={() => confermaCambiaTappa(item)}>✓ Sposta</button>
+            <button className="btn small" onClick={annullaCambiaTappa}>✕ Annulla</button>
+          </div>
+        )}
         {quickPriceId === item.id && (
           <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'6px',flexWrap:'wrap'}}>
             <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
@@ -1606,12 +1659,19 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const totBPLista = itemsBP.reduce((a, i) => a + Number(i.prezzoTotale || 0), 0);
   const totBPPresi = presi.filter(i => i.buonoPasto).reduce((a, i) => a + Number(i.prezzoTotale || 0), 0);
 
-  // Raggruppa per categoria
-  const bycat = {};
+  // Raggruppa per tappa (negozio): l'ordine delle sezioni segue l'ordine delle tappe
+  // definito in Impostazioni, così la lista rispecchia il giro che si vuole fare
+  const bytappa = {};
   for (const item of daPrendere) {
-    if (!bycat[item.cat]) bycat[item.cat] = [];
-    bycat[item.cat].push(item);
+    const t = item.tappa || 'Altro';
+    if (!bytappa[t]) bytappa[t] = [];
+    bytappa[t].push(item);
   }
+  const tappeOrdinate = [
+    ...tappaList.filter(t => bytappa[t]),
+    ...Object.keys(bytappa).filter(t => !tappaList.includes(t)),
+  ];
+  const numTappeRimanenti = tappeOrdinate.length;
 
   return (
     <div className="section active">
@@ -1623,6 +1683,13 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕' : '+ Aggiungi'}</button>
         </div>
       </div>
+
+      {numTappeRimanenti > 0 && (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'10px',padding:'10px 14px',marginBottom:'14px'}}>
+          <span style={{fontSize:'13px',color:'var(--accent-dark)',fontWeight:'600'}}>📍 Tappe rimanenti</span>
+          <span style={{fontSize:'16px',fontWeight:'800',color:'var(--accent-dark)'}}>{numTappeRimanenti}</span>
+        </div>
+      )}
 
       {itemsBP.length > 0 && (
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--salmon-bg)',border:'1px solid var(--salmon-border)',borderRadius:'10px',padding:'10px 14px',marginBottom:'14px'}}>
@@ -1655,6 +1722,19 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           </div>
           <div className="form-row">
             <div className="form-group">
+              <label>Tappa (negozio)</label>
+              <select required value={form.tappa} onChange={e => { setForm(f => ({...f, tappa: e.target.value})); setShowNewTappa(false); }}>
+                <option value="">Seleziona...</option>
+                {tappaList.map(t => <option key={t}>{t}</option>)}
+              </select>
+              {!showNewTappa && <button type="button" onClick={() => setShowNewTappa(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova tappa</button>}
+              {showNewTappa && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
+                <input type="text" placeholder="Nome tappa" value={newTappaInline} onChange={e => setNewTappaInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addTappaInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
+                <button type="button" className="btn primary small" onClick={addTappaInline}>✓</button>
+                <button type="button" className="btn small" onClick={() => setShowNewTappa(false)}>✕</button>
+              </div>}
+            </div>
+            <div className="form-group">
               <label>Categoria</label>
               <select required value={form.cat} onChange={e => { setForm(f => ({...f, cat: e.target.value})); setShowNewCat(false); }}>
                 <option value="">Seleziona...</option>
@@ -1674,10 +1754,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
       {lista.length === 0 && <div className="empty">Lista vuota — aggiungi qualcosa!</div>}
 
-      {Object.entries(bycat).map(([cat, items]) => (
-        <div key={cat} style={{marginBottom:'14px'}}>
-          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>{cat}</div>
-          {items.map(item => renderItem(item))}
+      {tappeOrdinate.map(t => (
+        <div key={t} style={{marginBottom:'14px'}}>
+          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>📍 {t} <span style={{fontWeight:'400',color:'var(--text3)'}}>({bytappa[t].length})</span></div>
+          {bytappa[t].map(item => renderItem(item))}
         </div>
       ))}
 
@@ -1979,6 +2059,7 @@ function ReportTab({ data, addItems, removeItems }) {
 function ImpostazioniTab({ data, saveData }) {
   const [newCat, setNewCat] = useState('');
   const [newCatLista, setNewCatLista] = useState('');
+  const [newTappa, setNewTappa] = useState('');
 
   function addCat() {
     if (!newCat.trim()) return;
@@ -1995,6 +2076,14 @@ function ImpostazioniTab({ data, saveData }) {
   }
   function delCatLista(c) {
     saveData({ categorieLista: (data.categorieLista || DEFAULT_SPESA_CATS).filter(x => x !== c) });
+  }
+  function addTappa() {
+    if (!newTappa.trim()) return;
+    saveData({ tappeLista: [...(data.tappeLista || DEFAULT_TAPPE), newTappa.trim()] });
+    setNewTappa('');
+  }
+  function delTappa(t) {
+    saveData({ tappeLista: (data.tappeLista || DEFAULT_TAPPE).filter(x => x !== t) });
   }
 
   return (
@@ -2019,6 +2108,18 @@ function ImpostazioniTab({ data, saveData }) {
           <div className="form-row" style={{marginTop:'10px'}}>
             <input type="text" placeholder="Nuova categoria..." value={newCatLista} onChange={e => setNewCatLista(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCatLista()} style={{flex:1}} />
             <button className="btn primary" onClick={addCatLista}>Aggiungi</button>
+          </div>
+        </div>
+
+        <div className="setting-section" style={{marginTop:'20px'}}>
+          <div className="setting-label">Tappe (negozi) lista spesa</div>
+          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>Usate per raggruppare la lista della spesa per giro/negozio (es. Fruttivendolo, Supermercato, Farmacia...)</div>
+          <div>{(data.tappeLista || DEFAULT_TAPPE).map(t => (
+            <span className="cat-chip" key={t}>{t}<button onClick={() => delTappa(t)}>✕</button></span>
+          ))}</div>
+          <div className="form-row" style={{marginTop:'10px'}}>
+            <input type="text" placeholder="Nuova tappa..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
+            <button className="btn primary" onClick={addTappa}>Aggiungi</button>
           </div>
         </div>
       </div>
