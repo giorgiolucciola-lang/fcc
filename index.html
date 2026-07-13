@@ -59,7 +59,10 @@ nav {
   max-width: 700px; margin: 0 auto;
 }
 .nav-title { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.3px; display: flex; align-items: baseline; gap: 6px; }
-.nav-version { color: rgba(255,255,255,0.55); font-size: 11px; font-weight: 500; letter-spacing: 0.2px; }
+.nav-version {
+  color: #fff; font-size: 14px; font-weight: 700; letter-spacing: 0.3px;
+  background: rgba(255,255,255,0.22); padding: 2px 9px; border-radius: 10px;
+}
 .nav-user { color: rgba(255,255,255,0.85); font-size: 13px; display: flex; align-items: center; gap: 8px; }
 .nav-tabs {
   display: flex; overflow-x: auto;
@@ -328,7 +331,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v16";
+const APP_VERSION = "v18";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1417,7 +1420,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   function add() {
     if (!form.nome) return;
-    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false };
+    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
     addItems('listaSpesa', [item]);
     setForm({ nome: '', cat: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   }
@@ -1479,6 +1482,21 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function updatePrezzoTotale(item, val) {
     updateItem('listaSpesa', item, { ...item, prezzoTotale: val });
   }
+  // Aggiorna la quantità di un articolo (anche già in lista, es. al supermercato) e ricalcola
+  // in automatico il prezzo totale se è presente un prezzo unitario
+  function updateQta(item, val) {
+    const qtaNum = parseFloat(val);
+    const unitNum = parseFloat(item.prezzoUnitario);
+    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : item.prezzoTotale;
+    updateItem('listaSpesa', item, { ...item, qta: val, prezzoTotale: totaleAuto });
+  }
+  // Marca/smarca un articolo come pagabile con i buoni pasto (solo etichetta visiva + totale,
+  // serve a Giorgio per non superare il limite giornaliero di spesa consentito dai buoni pasto).
+  // Al momento di "Registra spesa", gli articoli marcati NON finiscono nel Budget: il loro
+  // importo viene invece scalato dal saldo Buoni Pasto (tab Report).
+  function toggleBuonoPasto(item) {
+    updateItem('listaSpesa', item, { ...item, buonoPasto: !item.buonoPasto });
+  }
   // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
   // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
   // (un'unica operazione atomica: aggiunge le spese e rimuove gli articoli presi insieme)
@@ -1488,12 +1506,17 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (senzaPrezzo.length > 0) {
       const nomi = senzaPrezzo.map(i => i.nome).join(', ');
       const ok = window.confirm(
-        `${senzaPrezzo.length} articolo${senzaPrezzo.length > 1 ? 'i' : ''} senza prezzo (${nomi}) ${senzaPrezzo.length > 1 ? 'non verranno registrati' : 'non verrà registrato'} nel Budget.\n\nProcedere comunque?`
+        `${senzaPrezzo.length} articolo${senzaPrezzo.length > 1 ? 'i' : ''} senza prezzo (${nomi}) ${senzaPrezzo.length > 1 ? 'non verranno registrati' : 'non verrà registrato'}.\n\nProcedere comunque?`
       );
       if (!ok) return;
     }
+    // Gli articoli marcati "buono pasto" NON sono spesa reale: il loro importo va scalato
+    // dal saldo Buoni Pasto (Report) invece di entrare nel Budget.
+    const conPrezzoNormale = conPrezzo.filter(i => !i.buonoPasto);
+    const conPrezzoBP = conPrezzo.filter(i => i.buonoPasto);
+
     const perCategoria = {};
-    for (const item of conPrezzo) {
+    for (const item of conPrezzoNormale) {
       perCategoria[item.cat] = (perCategoria[item.cat] || 0) + Number(item.prezzoTotale);
     }
     const oggi = localDateStr();
@@ -1505,27 +1528,46 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       subcat: '',
       date: oggi,
     }));
+    const totBP = conPrezzoBP.reduce((a, i) => a + Number(i.prezzoTotale), 0);
+    const nuoviMovimentiBP = totBP > 0 ? [{
+      id: Date.now() + 777,
+      tipo: 'speso',
+      desc: `Spesa supermercato (${conPrezzoBP.map(i => i.nome).join(', ')})`,
+      qty: null,
+      amount: Math.round(totBP * 100) / 100,
+      date: oggi,
+    }] : [];
+
     const updateObj = {};
     if (nuoveSpese.length) updateObj.spese = firebase.firestore.FieldValue.arrayUnion(...nuoveSpese);
+    if (nuoviMovimentiBP.length) updateObj.buoniPasto = firebase.firestore.FieldValue.arrayUnion(...nuoviMovimentiBP);
     if (presi.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...presi);
     if (Object.keys(updateObj).length) applyUpdate(updateObj);
   }
   // Rendering di una riga articolo (usata sia per "da prendere" che per "già presi")
   function renderItem(item) {
+    const bp = !!item.buonoPasto;
     return (
       <div key={item.id}>
-        <div className={`spesa-lista-item${item.checked?' checked':''}`}>
+        <div className={`spesa-lista-item${item.checked?' checked':''}`}
+          style={bp ? {background:'var(--salmon-bg)', borderColor:'var(--salmon-border)'} : {}}>
           <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
           <span style={{flex:1, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>{item.nome}</span>
-          {item.qta && item.qta !== '1' && (
-            <span style={{background:'var(--accent-light)',color:'var(--accent-dark)',fontWeight:700,fontSize:'12px',padding:'2px 8px',borderRadius:'20px',border:'1px solid var(--border2)',whiteSpace:'nowrap'}}>× {item.qta}</span>
-          )}
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={item.qta || '1'} title="Quantità"
+            onChange={e => updateQta(item, e.target.value)}
+            style={{width:'34px',padding:'5px 4px',fontSize:'12px',flexShrink:0,textAlign:'center'}} />
           <input type="number" step="0.01" min="0" placeholder="€ unit." value={item.prezzoUnitario || ''}
             onChange={e => updatePrezzoUnitario(item, e.target.value)}
             style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0}} />
           <input type="number" step="0.01" min="0" placeholder="€ tot." value={item.prezzoTotale || ''}
             onChange={e => updatePrezzoTotale(item, e.target.value)}
             style={{width:'58px',padding:'5px 6px',fontSize:'12px',flexShrink:0,fontWeight:700}} />
+          <button
+            className="btn small"
+            title={bp ? 'Pagabile con buoni pasto (tocca per togliere)' : 'Segna come pagabile con buoni pasto'}
+            onClick={() => toggleBuonoPasto(item)}
+            style={bp ? {background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff',flexShrink:0,padding:'5px 8px'} : {flexShrink:0,padding:'5px 8px'}}
+          >🍱</button>
           <button className="spesa-delete" onClick={() => del(item)}>✕</button>
         </div>
         {quickPriceId === item.id && (
@@ -1552,6 +1594,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const daPrendere = lista.filter(i => !i.checked);
   const presi = lista.filter(i => i.checked);
 
+  // Totale corrente degli articoli marcati "buono pasto" (presi + da prendere): serve per
+  // controllare al volo, durante la spesa, di non superare il limite giornaliero dei buoni pasto
+  const itemsBP = lista.filter(i => i.buonoPasto);
+  const totBPLista = itemsBP.reduce((a, i) => a + Number(i.prezzoTotale || 0), 0);
+  const totBPPresi = presi.filter(i => i.buonoPasto).reduce((a, i) => a + Number(i.prezzoTotale || 0), 0);
+
   // Raggruppa per categoria
   const bycat = {};
   for (const item of daPrendere) {
@@ -1569,6 +1617,13 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕' : '+ Aggiungi'}</button>
         </div>
       </div>
+
+      {itemsBP.length > 0 && (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--salmon-bg)',border:'1px solid var(--salmon-border)',borderRadius:'10px',padding:'10px 14px',marginBottom:'14px'}}>
+          <span style={{fontSize:'13px',color:'var(--salmon)',fontWeight:'600'}}>🍱 Totale marcato buoni pasto ({itemsBP.length} articol{itemsBP.length === 1 ? 'o' : 'i'})</span>
+          <span style={{fontSize:'16px',fontWeight:'800',color:'var(--salmon)'}}>{formatEuro(totBPLista)}</span>
+        </div>
+      )}
 
       {show && (
         <div className="card" style={{background:'var(--accent-light)'}}>
@@ -1632,11 +1687,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em'}}>✓ Già presi</div>
             <div style={{fontSize:'13px',fontWeight:700,color:'var(--green)'}}>
               Totale: {formatEuro(presi.reduce((a, i) => a + Number(i.prezzoTotale || 0), 0))}
+              {totBPPresi > 0 && <span style={{color:'var(--salmon)',fontWeight:600}}> (di cui 🍱 {formatEuro(totBPPresi)})</span>}
             </div>
           </div>
           {presi.map(item => renderItem(item))}
           <button className="btn primary" style={{marginTop:'10px',width:'100%',background:'var(--green)',borderColor:'var(--green)'}} onClick={registraSpesa}>
-            💾 Registra spesa nel Budget e svuota lista
+            💾 Registra spesa{totBPPresi > 0 ? ' (Budget + Buoni Pasto)' : ' nel Budget'} e svuota lista
           </button>
         </div>
       )}
@@ -1653,8 +1709,12 @@ function ReportTab({ data, addItems, removeItems }) {
   const [scadFiltroMese, setScadFiltroMese] = useState(false); // false = tutto lo storico, true = solo mese selezionato
   // Buoni pasto: voce puramente informativa, NON è una spesa reale (non viene pagata),
   // quindi vive in un campo separato (buoniPasto) e non entra mai nei totali di Budget/Report.
+  // Ogni buono pasto vale un importo fisso (VALORE_BUONO_PASTO); ogni voce è di tipo
+  // "ricevuto" (entrata, es. accredito mensile dall'azienda) o "speso" (uscita, es. usato al supermercato).
+  // Il saldo residuo = totale ricevuti - totale spesi, calcolato su tutta la storia (non solo il mese in vista).
+  const VALORE_BUONO_PASTO = 8;
   const [showBP, setShowBP] = useState(false);
-  const [formBP, setFormBP] = useState({ desc: '', amount: '', date: localDateStr() });
+  const [formBP, setFormBP] = useState({ tipo: 'ricevuto', desc: '', qty: '', amount: '', date: localDateStr() });
 
   const speseMese = (data.spese || []).filter(s => {
     const [sy, sm] = s.date.split('-').map(Number);
@@ -1701,13 +1761,27 @@ function ReportTab({ data, addItems, removeItems }) {
     const [by, bm] = b.date.split('-').map(Number);
     return by === year && bm === month;
   }).sort((a, b) => b.date.localeCompare(a.date));
-  const totBuoniPasto = buoniPastoMese.reduce((a, b) => a + Number(b.amount || 0), 0);
+  const totBuoniPasto = buoniPastoMese.reduce((a, b) => a + (b.tipo === 'speso' ? -Number(b.amount || 0) : Number(b.amount || 0)), 0);
 
+  // Saldo residuo su tutta la storia: entrate (ricevuti, incluse le voci vecchie senza "tipo",
+  // trattate come ricevute per compatibilità) meno uscite (spesi)
+  const tuttiBP = data.buoniPasto || [];
+  const totRicevutiStorico = tuttiBP.filter(b => (b.tipo || 'ricevuto') === 'ricevuto').reduce((a, b) => a + Number(b.amount || 0), 0);
+  const totSpesiStorico = tuttiBP.filter(b => b.tipo === 'speso').reduce((a, b) => a + Number(b.amount || 0), 0);
+  const saldoBP = totRicevutiStorico - totSpesiStorico;
+  const qtyResidua = VALORE_BUONO_PASTO ? saldoBP / VALORE_BUONO_PASTO : 0;
+
+  function setFormBPQty(qty) {
+    setFormBP(f => ({ ...f, qty, amount: qty === '' ? '' : (Number(qty) * VALORE_BUONO_PASTO).toFixed(2) }));
+  }
+  function setFormBPAmount(amount) {
+    setFormBP(f => ({ ...f, amount, qty: amount === '' ? '' : (Number(amount) / VALORE_BUONO_PASTO).toFixed(2) }));
+  }
   function addBP() {
     if (!formBP.desc || !formBP.amount) return;
-    const b = { id: Date.now(), desc: formBP.desc, amount: Number(formBP.amount), date: formBP.date };
+    const b = { id: Date.now(), tipo: formBP.tipo, desc: formBP.desc, qty: formBP.qty ? Number(formBP.qty) : null, amount: Number(formBP.amount), date: formBP.date };
     addItems('buoniPasto', [b]);
-    setFormBP({ desc: '', amount: '', date: localDateStr() });
+    setFormBP({ tipo: 'ricevuto', desc: '', qty: '', amount: '', date: localDateStr() });
     setShowBP(false);
   }
   function delBP(item) {
@@ -1822,16 +1896,40 @@ function ReportTab({ data, addItems, removeItems }) {
           Dato puramente informativo: i buoni pasto non vengono pagati, quindi <strong>non sono conteggiati</strong> in nessun totale di Budget o Report.
         </div>
 
+        <div style={{background:'#fff',border:'1px solid var(--salmon-border)',borderRadius:'10px',padding:'12px 14px',marginBottom:'14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:'12px',color:'var(--text3)'}}>Saldo residuo (ricevuti − spesi, storico completo)</div>
+            <div style={{fontSize:'20px',fontWeight:'800',color:'var(--salmon)'}}>{formatEuro(saldoBP)}</div>
+          </div>
+          <div style={{textAlign:'right',fontSize:'13px',color:'var(--text2)'}}>
+            ≈ {qtyResidua.toFixed(2)} buoni<br/>
+            <span style={{fontSize:'11px',color:'var(--text3)'}}>1 buono = {formatEuro(VALORE_BUONO_PASTO)}</span>
+          </div>
+        </div>
+
         {showBP && (
           <div className="add-spesa-form" style={{background:'#fff',borderColor:'var(--salmon-border)'}}>
             <div className="form-row">
+              <div className="form-group">
+                <label>Tipo movimento</label>
+                <select value={formBP.tipo} onChange={e => setFormBP(f => ({...f, tipo: e.target.value}))}>
+                  <option value="ricevuto">➕ Ricevuto (entrata)</option>
+                  <option value="speso">➖ Speso (uscita)</option>
+                </select>
+              </div>
               <div className="form-group" style={{flex:2}}>
                 <label>Descrizione</label>
-                <input type="text" placeholder="Es. Buoni pasto lavoro" value={formBP.desc} onChange={e => setFormBP(f => ({...f, desc: e.target.value}))} />
+                <input type="text" placeholder="Es. Accredito mensile lavoro" value={formBP.desc} onChange={e => setFormBP(f => ({...f, desc: e.target.value}))} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Quantità (unità)</label>
+                <input type="number" step="1" min="0" placeholder="Es. 20" value={formBP.qty} onChange={e => setFormBPQty(e.target.value)} />
               </div>
               <div className="form-group">
-                <label>Importo €</label>
-                <input type="number" step="0.01" min="0" placeholder="0.00" value={formBP.amount} onChange={e => setFormBP(f => ({...f, amount: e.target.value}))} />
+                <label>Valore €</label>
+                <input type="number" step="0.01" min="0" placeholder="0.00" value={formBP.amount} onChange={e => setFormBPAmount(e.target.value)} />
               </div>
             </div>
             <div className="form-row">
@@ -1840,24 +1938,30 @@ function ReportTab({ data, addItems, removeItems }) {
                 <input type="date" value={formBP.date} onChange={e => setFormBP(f => ({...f, date: e.target.value}))} />
               </div>
             </div>
-            <button className="btn" style={{background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff'}} onClick={addBP}>💾 Salva buono pasto</button>
+            <button className="btn" style={{background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff'}} onClick={addBP}>💾 Salva movimento</button>
           </div>
         )}
 
-        {buoniPastoMese.length === 0 && <div className="empty">Nessun buono pasto in {monthLabel(year, month)}</div>}
-        {buoniPastoMese.map(b => (
-          <div className="spesa-item" key={b.id} style={{borderColor:'var(--salmon-border)'}}>
-            <div style={{flex:1}}>
-              <div className="spesa-desc" style={{color:'var(--salmon)'}}>{b.desc}</div>
-              <div className="spesa-cat">{formatDataIT(b.date)}</div>
+        {buoniPastoMese.length === 0 && <div className="empty">Nessun movimento in {monthLabel(year, month)}</div>}
+        {buoniPastoMese.map(b => {
+          const isSpeso = b.tipo === 'speso';
+          return (
+            <div className="spesa-item" key={b.id} style={{borderColor:'var(--salmon-border)'}}>
+              <div style={{flex:1}}>
+                <div className="spesa-desc" style={{color:'var(--salmon)'}}>
+                  {isSpeso ? '➖' : '➕'} {b.desc}
+                  {b.qty ? <span style={{fontSize:'11px',color:'var(--text3)',fontWeight:'400'}}> · {b.qty} buon{b.qty === 1 ? 'o' : 'i'}</span> : null}
+                </div>
+                <div className="spesa-cat">{formatDataIT(b.date)}</div>
+              </div>
+              <div className="spesa-amount" style={{color:'var(--salmon)'}}>{isSpeso ? '−' : '+'}{formatEuro(b.amount)}</div>
+              <button className="spesa-delete" onClick={() => delBP(b)}>🗑</button>
             </div>
-            <div className="spesa-amount" style={{color:'var(--salmon)'}}>{formatEuro(b.amount)}</div>
-            <button className="spesa-delete" onClick={() => delBP(b)}>🗑</button>
-          </div>
-        ))}
+          );
+        })}
         {buoniPastoMese.length > 0 && (
           <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--salmon-border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
-            <span>Totale (informativo, non incluso nei totali)</span><span style={{color:'var(--salmon)'}}>{formatEuro(totBuoniPasto)}</span>
+            <span>Movimento del mese (informativo, non incluso nei totali)</span><span style={{color:'var(--salmon)'}}>{formatEuro(totBuoniPasto)}</span>
           </div>
         )}
       </div>
