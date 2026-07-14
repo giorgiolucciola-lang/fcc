@@ -222,7 +222,7 @@ select:required:valid:not(:focus) {
   border: 1px solid var(--border); border-radius: 10px;
   margin-bottom: 8px;
 }
-.scad-item.pagato { opacity: 0.55; }
+.scad-item.pagato { opacity: 0.85; }
 .scad-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .scad-dot.verde { background: var(--green); }
 .scad-dot.arancio { background: var(--orange); }
@@ -337,7 +337,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v21";
+const APP_VERSION = "v22";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -533,6 +533,7 @@ function App() {
           tappeLista: DEFAULT_TAPPE,
           budgetMensile: 2000,
           buoniPasto: [],
+          storicoProdotti: [],
         };
         ref.set(init);
         setData(init);
@@ -691,6 +692,11 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
     else setMonth(m => m + 1);
   }
 
+  // Elenchi di descrizioni già usate in passato, per il completamento automatico dei campi
+  // (nessun dato nuovo da salvare: si riusano semplicemente le spese/entrate già registrate)
+  const descSpeseNote = Array.from(new Set((data.spese || []).map(s => s.desc).filter(Boolean)));
+  const descEntrateNote = Array.from(new Set((data.entrate || []).map(e => e.desc).filter(Boolean)));
+
   const speseMese = (data.spese || []).filter(s => {
     const [sy, sm] = s.date.split('-').map(Number);
     return sy === year && sm === month;
@@ -758,6 +764,8 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
 
   return (
     <div className="section active">
+      <datalist id="descSpeseList">{descSpeseNote.map(d => <option key={d} value={d} />)}</datalist>
+      <datalist id="descEntrateList">{descEntrateNote.map(d => <option key={d} value={d} />)}</datalist>
       <div className="print-title">💜 Family CC — Budget — {monthLabel(year, month)}</div>
       <div className="budget-header">
         <div className="month-nav">
@@ -801,7 +809,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
             <div className="form-row">
               <div className="form-group" style={{flex:2}}>
                 <label>Descrizione</label>
-                <input type="text" placeholder="Es. Stipendio" value={formE.desc} onChange={e => setFormE(f => ({...f, desc: e.target.value}))} />
+                <input type="text" placeholder="Es. Stipendio" list="descEntrateList" value={formE.desc} onChange={e => setFormE(f => ({...f, desc: e.target.value}))} />
               </div>
               <div className="form-group">
                 <label>Importo €</label>
@@ -845,7 +853,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
             <div className="form-row">
               <div className="form-group" style={{flex:2}}>
                 <label>Descrizione</label>
-                <input type="text" placeholder="Es. Supermercato" value={form.desc} onChange={e => setForm(f => ({...f, desc: e.target.value}))} />
+                <input type="text" placeholder="Es. Supermercato" list="descSpeseList" value={form.desc} onChange={e => setForm(f => ({...f, desc: e.target.value}))} />
               </div>
               <div className="form-group">
                 <label>Importo €</label>
@@ -918,7 +926,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
                     <div className="form-row">
                       <div className="form-group" style={{flex:2}}>
                         <label>Descrizione</label>
-                        <input type="text" placeholder="Descrizione" value={editSpesaForm.desc} onChange={e => setEditSpesaForm(f => ({...f, desc: e.target.value}))} />
+                        <input type="text" placeholder="Descrizione" list="descSpeseList" value={editSpesaForm.desc} onChange={e => setEditSpesaForm(f => ({...f, desc: e.target.value}))} />
                       </div>
                       <div className="form-group">
                         <label>Importo €</label>
@@ -1140,6 +1148,8 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
   }
 
   const sorted = [...(data.scadenze || [])].sort((a, b) => a.date.localeCompare(b.date));
+  // Nomi già usati in passato per le scadenze, per il completamento automatico del campo Nome
+  const nomiScadenzeNote = Array.from(new Set((data.scadenze || []).map(s => s.nome).filter(Boolean)));
 
   // Totale scadenze del mese corrente (quello di oggi), da mostrare in evidenza in cima alla scheda.
   // Riusa lo stesso stile a "card" del riepilogo del Budget, così su iPhone resta leggibile
@@ -1164,6 +1174,15 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
     return `🔄 Ogni ${valore} mesi${suffisso}`;
   }
 
+  // Colore di sfondo della riga, per distinguere a colpo d'occhio pagate/scadute/da pagare/programmate
+  function rowStyle(s) {
+    if (s.pagato) return { background: 'var(--green-bg)', borderColor: 'var(--green-border)' };
+    const col = scadenzaColor(s.date);
+    if (col === 'rosso') return { background: 'var(--red-bg)', borderColor: 'var(--red-border)' };
+    if (col === 'arancio') return { background: 'var(--orange-bg)', borderColor: 'var(--orange)' };
+    return {};
+  }
+
   // Stato unificato: testo + colore del pulsante, in base a pagato/scadenza
   function statoBtn(s) {
     if (s.pagato) return { label: '✓ Pagata', bg: 'var(--green)', border: 'var(--green)', color: '#fff' };
@@ -1175,6 +1194,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
 
   return (
     <div className="section active">
+      <datalist id="nomeScadenzeList">{nomiScadenzeNote.map(n => <option key={n} value={n} />)}</datalist>
       <div className="print-title">💜 Family CC — Scadenze</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>📅 Scadenze</div>
@@ -1212,7 +1232,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
           <div className="form-row">
             <div className="form-group" style={{flex:2}}>
               <label>Nome</label>
-              <input type="text" placeholder="Es. Affitto" value={form.nome} onChange={e => setForm(f => ({...f, nome: e.target.value}))} />
+              <input type="text" placeholder="Es. Affitto" list="nomeScadenzeList" value={form.nome} onChange={e => setForm(f => ({...f, nome: e.target.value}))} />
             </div>
             <div className="form-group">
               <label>Importo €</label>
@@ -1277,7 +1297,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
         const st = statoBtn(s);
         return (
         <div key={s.id}>
-          <div className={`scad-item${s.pagato ? ' pagato' : ''}`}>
+          <div className={`scad-item${s.pagato ? ' pagato' : ''}`} style={rowStyle(s)}>
             {isMeseCorrente(s.date) && !s.pagato && <span className="scad-dot giallo" title="Scadenza di questo mese"></span>}
             <div className="scad-info">
               <div className="scad-name">{s.nome} {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
@@ -1321,7 +1341,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
               <div className="form-row">
                 <div className="form-group" style={{flex:2}}>
                   <label>Nome</label>
-                  <input type="text" placeholder="Nome" value={editForm.nome} onChange={e => setEditForm(f => ({...f, nome: e.target.value}))} />
+                  <input type="text" placeholder="Nome" list="nomeScadenzeList" value={editForm.nome} onChange={e => setEditForm(f => ({...f, nome: e.target.value}))} />
                 </div>
                 <div className="form-group">
                   <label>Importo €</label>
@@ -1416,6 +1436,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const [tappaEditId, setTappaEditId] = useState(null);
   const [tappaEditVal, setTappaEditVal] = useState('');
 
+  // Nomi prodotto già usati in passato (storico persistente + articoli attualmente in lista),
+  // per il completamento automatico del campo "Prodotto"
+  const prodottiNote = Array.from(new Set([...(data.storicoProdotti || []), ...((data.listaSpesa || []).map(i => i.nome))].filter(Boolean)));
+
   // Elenco categorie robusto: se l'array è vuoto o assente, usa i default
   const catList = (data.categorieLista && data.categorieLista.length) ? data.categorieLista : DEFAULT_SPESA_CATS;
   // Elenco tappe (negozi) robusto: se l'array è vuoto o assente, usa i default
@@ -1447,8 +1471,14 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   function add() {
     if (!form.nome) return;
-    const item = { id: Date.now(), nome: form.nome, cat: form.cat || 'Altro', tappa: form.tappa || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
+    const nomeTrim = form.nome.trim();
+    const item = { id: Date.now(), nome: nomeTrim, cat: form.cat || 'Altro', tappa: form.tappa || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
     addItems('listaSpesa', [item]);
+    // Salva il nome nello storico prodotti (persiste anche dopo "Registra spesa", a differenza
+    // della lista stessa), così il completamento automatico funziona anche per articoli già acquistati
+    if (nomeTrim && !(data.storicoProdotti || []).includes(nomeTrim)) {
+      addItems('storicoProdotti', [nomeTrim]);
+    }
     setForm({ nome: '', cat: '', tappa: form.tappa || '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   }
   // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
@@ -1699,6 +1729,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   return (
     <div className="section active">
+      <datalist id="prodottoList">{prodottiNote.map(n => <option key={n} value={n} />)}</datalist>
       <div className="print-title">💜 Family CC — Lista della spesa</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>🛒 Lista della spesa</div>
@@ -1727,7 +1758,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <div className="form-row">
             <div className="form-group" style={{flex:2}}>
               <label>Prodotto</label>
-              <input type="text" placeholder="Es. Latte" value={form.nome}
+              <input type="text" placeholder="Es. Latte" list="prodottoList" value={form.nome}
                 onChange={e => setForm(f => ({...f, nome: e.target.value}))}
                 onKeyDown={e => e.key === 'Enter' && add()} />
             </div>
