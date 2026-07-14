@@ -337,7 +337,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v22";
+const APP_VERSION = "v23";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1420,12 +1420,86 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
   );
 }
 
+// ── CAMPO CON COMPLETAMENTO AUTOMATICO ──────────────────────────────────────────
+// Sostituisce il <datalist> nativo (poco affidabile su Safari/iOS: spesso non mostra
+// i suggerimenti mentre si scrive). Mostra un piccolo menu sotto il campo che si
+// filtra in tempo reale in base a quello che si sta digitando, restando visibile
+// finché non si sceglie un suggerimento o non si tocca/clicca altrove.
+function AutocompleteInput({ value, onChange, options, placeholder, onEnter, className }) {
+  const [open, setOpen] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const wrapRef = useRef(null);
+
+  const filtered = value.trim()
+    ? options.filter(o => o.toLowerCase().includes(value.trim().toLowerCase()) && o.toLowerCase() !== value.trim().toLowerCase()).slice(0, 8)
+    : [];
+
+  useEffect(() => {
+    function handleOutside(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, []);
+
+  function selectOption(opt) {
+    onChange(opt);
+    setOpen(false);
+    setHighlightIdx(-1);
+  }
+
+  function handleKeyDown(e) {
+    if (open && filtered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightIdx(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectOption(filtered[highlightIdx]); return; }
+    }
+    if (e.key === 'Enter') { setOpen(false); if (onEnter) onEnter(); }
+    if (e.key === 'Escape') { setOpen(false); }
+  }
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        className={className}
+        placeholder={placeholder}
+        value={value}
+        autoComplete="off"
+        onChange={e => { onChange(e.target.value); setOpen(true); setHighlightIdx(-1); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: '1px solid var(--border2)', borderRadius: '8px', marginTop: '3px', boxShadow: 'var(--shadow)', maxHeight: '180px', overflowY: 'auto' }}>
+          {filtered.map((opt, i) => (
+            <div
+              key={opt}
+              onMouseDown={e => { e.preventDefault(); selectOption(opt); }}
+              onTouchStart={e => { e.preventDefault(); selectOption(opt); }}
+              style={{ padding: '9px 12px', fontSize: '14px', cursor: 'pointer', background: i === highlightIdx ? 'var(--accent-light)' : 'transparent' }}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', cat: '', tappa: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+  const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
+  const [newSottocatInline, setNewSottocatInline] = useState('');
+  const [showNewSottocat, setShowNewSottocat] = useState(false);
   const [newTappaInline, setNewTappaInline] = useState('');
   const [showNewTappa, setShowNewTappa] = useState(false);
   // Articolo per cui è aperto il riquadro "prezzo rapido" (flusso spunta+prezzo in un solo tocco)
@@ -1444,6 +1518,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const catList = (data.categorieLista && data.categorieLista.length) ? data.categorieLista : DEFAULT_SPESA_CATS;
   // Elenco tappe (negozi) robusto: se l'array è vuoto o assente, usa i default
   const tappaList = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
+  // Sottocategorie disponibili per la categoria attualmente selezionata nel form
+  const sottocatList = ((data.sottocategorieLista || {})[form.cat]) || [];
 
   useEffect(() => {
     if (quickPriceId && quickPriceInputRef.current) {
@@ -1460,6 +1536,17 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     setShowNewCat(false);
   }
 
+  function addSottocatInline() {
+    if (!newSottocatInline.trim() || !form.cat) return;
+    const sottocats = { ...(data.sottocategorieLista || {}) };
+    if (!sottocats[form.cat]) sottocats[form.cat] = [];
+    sottocats[form.cat] = [...sottocats[form.cat], newSottocatInline.trim()];
+    saveData({ sottocategorieLista: sottocats });
+    setForm(f => ({ ...f, sottocat: newSottocatInline.trim() }));
+    setNewSottocatInline('');
+    setShowNewSottocat(false);
+  }
+
   function addTappaInline() {
     if (!newTappaInline.trim()) return;
     const tappe = [...tappaList, newTappaInline.trim()];
@@ -1472,14 +1559,28 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function add() {
     if (!form.nome) return;
     const nomeTrim = form.nome.trim();
-    const item = { id: Date.now(), nome: nomeTrim, cat: form.cat || 'Altro', tappa: form.tappa || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
+    const catTrim = form.cat.trim();
+    const sottocatTrim = form.sottocat.trim();
+    const item = { id: Date.now(), nome: nomeTrim, cat: catTrim || 'Altro', sottocat: sottocatTrim, tappa: form.tappa || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
     addItems('listaSpesa', [item]);
     // Salva il nome nello storico prodotti (persiste anche dopo "Registra spesa", a differenza
     // della lista stessa), così il completamento automatico funziona anche per articoli già acquistati
     if (nomeTrim && !(data.storicoProdotti || []).includes(nomeTrim)) {
       addItems('storicoProdotti', [nomeTrim]);
     }
-    setForm({ nome: '', cat: '', tappa: form.tappa || '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+    // Il campo Categoria ora è testo libero con suggerimenti: se è stata digitata una
+    // categoria nuova (non ancora in archivio), la aggiunge da sola all'elenco, così
+    // sarà suggerita anche la prossima volta
+    if (catTrim && !catList.includes(catTrim)) {
+      saveData({ categorieLista: [...catList, catTrim] });
+    }
+    // Stessa logica per la sottocategoria, archiviata sotto la categoria scelta
+    if (catTrim && sottocatTrim && !sottocatList.includes(sottocatTrim)) {
+      const sottocats = { ...(data.sottocategorieLista || {}) };
+      sottocats[catTrim] = [...(sottocats[catTrim] || []), sottocatTrim];
+      saveData({ sottocategorieLista: sottocats });
+    }
+    setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   }
   // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
   function handleFormUnitChange(val) {
@@ -1643,7 +1744,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
           <div style={{flex:1, minWidth:0, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>
             <div>{item.nome}</div>
-            <div className="spesa-cat">{item.cat}</div>
+            <div className="spesa-cat">{item.cat}{item.sottocat ? ` › ${item.sottocat}` : ''}</div>
           </div>
           <input type="text" inputMode="numeric" pattern="[0-9]*" value={draftVal(item, 'qta')} title="Quantità"
             onChange={e => setDraftQta(item, e.target.value)}
@@ -1729,7 +1830,6 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   return (
     <div className="section active">
-      <datalist id="prodottoList">{prodottiNote.map(n => <option key={n} value={n} />)}</datalist>
       <div className="print-title">💜 Family CC — Lista della spesa</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>🛒 Lista della spesa</div>
@@ -1755,26 +1855,66 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
       {show && (
         <div className="card" style={{background:'var(--accent-light)'}}>
+          {/* Prodotto */}
           <div className="form-row">
-            <div className="form-group" style={{flex:2}}>
+            <div className="form-group">
               <label>Prodotto</label>
-              <input type="text" placeholder="Es. Latte" list="prodottoList" value={form.nome}
-                onChange={e => setForm(f => ({...f, nome: e.target.value}))}
-                onKeyDown={e => e.key === 'Enter' && add()} />
+              <AutocompleteInput
+                placeholder="Es. Latte"
+                value={form.nome}
+                options={prodottiNote}
+                onChange={val => setForm(f => ({...f, nome: val}))}
+                onEnter={add}
+              />
             </div>
+          </div>
+          {/* Qtà, Unità, Totale */}
+          <div className="form-row">
             <div className="form-group" style={{maxWidth:'60px'}}>
               <label>Qtà</label>
               <input type="text" inputMode="numeric" pattern="[0-9]*" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
-              <label>€ unit.</label>
+              <label>€ unità</label>
               <input type="number" step="0.01" min="0" placeholder="0.00" value={form.prezzoUnitario} onChange={e => handleFormUnitChange(e.target.value)} />
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
-              <label>€ tot.</label>
+              <label>€ totale</label>
               <input type="number" step="0.01" min="0" placeholder="0.00" value={form.prezzoTotale} onChange={e => setForm(f => ({...f, prezzoTotale: e.target.value}))} />
             </div>
           </div>
+          {/* Categoria */}
+          <div className="form-row">
+            <div className="form-group">
+              <label>Categoria</label>
+              <AutocompleteInput
+                placeholder="Es. Latticini"
+                value={form.cat}
+                options={catList}
+                onChange={val => setForm(f => ({...f, cat: val, sottocat: ''}))}
+                onEnter={add}
+              />
+            </div>
+          </div>
+          {/* Sottocategoria (solo se è stata scelta una categoria) */}
+          {form.cat && (
+            <div className="form-row">
+              <div className="form-group">
+                <label>Sottocategoria <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
+                <select value={form.sottocat} onChange={e => setForm(f => ({...f, sottocat: e.target.value}))}>
+                  <option value="">Nessuna</option>
+                  {sottocatList.map(sc => <option key={sc}>{sc}</option>)}
+                </select>
+                {!showNewSottocat && <button type="button" onClick={() => setShowNewSottocat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova sottocategoria</button>}
+                {showNewSottocat && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
+                  <input type="text" placeholder="Nome sottocategoria" value={newSottocatInline} onChange={e => setNewSottocatInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addSottocatInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
+                  <button type="button" className="btn primary small" onClick={addSottocatInline}>✓</button>
+                  <button type="button" className="btn small" onClick={() => setShowNewSottocat(false)}>✕</button>
+                </div>}
+              </div>
+            </div>
+          )}
+          {/* Tappa */}
           <div className="form-row">
             <div className="form-group">
               <label>Tappa (negozio)</label>
@@ -1787,19 +1927,6 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
                 <input type="text" placeholder="Nome tappa" value={newTappaInline} onChange={e => setNewTappaInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addTappaInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
                 <button type="button" className="btn primary small" onClick={addTappaInline}>✓</button>
                 <button type="button" className="btn small" onClick={() => setShowNewTappa(false)}>✕</button>
-              </div>}
-            </div>
-            <div className="form-group">
-              <label>Categoria</label>
-              <select required value={form.cat} onChange={e => { setForm(f => ({...f, cat: e.target.value})); setShowNewCat(false); }}>
-                <option value="">Seleziona...</option>
-                {catList.map(c => <option key={c}>{c}</option>)}
-              </select>
-              {!showNewCat && <button type="button" onClick={() => setShowNewCat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova categoria</button>}
-              {showNewCat && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
-                <input type="text" placeholder="Nome categoria" value={newCatInline} onChange={e => setNewCatInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addCatInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
-                <button type="button" className="btn primary small" onClick={addCatInline}>✓</button>
-                <button type="button" className="btn small" onClick={() => setShowNewCat(false)}>✕</button>
               </div>}
             </div>
           </div>
@@ -2156,7 +2283,7 @@ function ImpostazioniTab({ data, saveData }) {
         </div>
 
         <div className="setting-section" style={{marginTop:'20px'}}>
-          <div className="setting-label">Categorie lista spesa</div>
+          <div className="setting-label">Categoria prodotti</div>
           <div>{(data.categorieLista || DEFAULT_SPESA_CATS).map(c => (
             <span className="cat-chip" key={c}>{c}<button onClick={() => delCatLista(c)}>✕</button></span>
           ))}</div>
