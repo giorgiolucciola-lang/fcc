@@ -288,6 +288,27 @@ select:required:valid:not(:focus) {
 .btn-google:hover { box-shadow: 0 4px 16px rgba(155,89,182,0.15); border-color: var(--accent); }
 
 .empty { text-align: center; color: var(--text3); padding: 32px 16px; font-size: 14px; }
+
+/* RIQUADRO DI CONFERMA PERSONALIZZATO ────────────────────────────────────────
+   Sostituisce window.confirm(): su iOS, quando l'app è aperta dall'icona
+   installata sulla schermata Home (modalità "standalone"), i riquadri nativi
+   confirm/alert spesso NON vengono mostrati e il codice riceve comunque "OK"
+   senza che l'utente veda nulla, causando cancellazioni indesiderate. Questo
+   riquadro è disegnato dall'app stessa, quindi funziona sempre, anche da app
+   installata. */
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(26,21,32,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+}
+.confirm-box {
+  background: #fff; border-radius: 14px; padding: 22px 20px;
+  max-width: 340px; width: 100%; box-shadow: 0 8px 32px rgba(26,21,32,0.25);
+  text-align: center;
+}
+.confirm-msg { font-size: 15px; color: var(--text); margin-bottom: 18px; line-height: 1.5; }
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-actions .btn { flex: 1; }
 .badge-entrata { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); border-radius: 5px; font-size: 11px; font-weight: 600; padding: 2px 6px; }
 .badge-uscita { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); border-radius: 5px; font-size: 11px; font-weight: 600; padding: 2px 6px; }
 
@@ -337,7 +358,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v25";
+const APP_VERSION = "v26";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -505,6 +526,19 @@ function App() {
   const [tab, setTab] = useState('budget');
   const [syncing, setSyncing] = useState(false);
   const [data, setData] = useState(null);
+  // Riquadro di conferma personalizzato (sostituisce window.confirm, che su iOS
+  // in modalità app installata da Home Screen non viene mostrato). askConfirm
+  // restituisce una Promise<boolean>, usabile con "await" come window.confirm.
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  function askConfirm(message) {
+    return new Promise(resolve => {
+      setConfirmDialog({ message, resolve });
+    });
+  }
+  function risolviConfirm(esito) {
+    if (confirmDialog) confirmDialog.resolve(esito);
+    setConfirmDialog(null);
+  }
 
   useEffect(() => {
     const timeout = setTimeout(() => setLoading(false), 6000);
@@ -648,17 +682,29 @@ function App() {
         </div>
       </nav>
 
-      {tab === 'budget' && <BudgetTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} />}
-      {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} />}
-      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} />}
-      {tab === 'report' && <ReportTab data={data} addItems={addItems} removeItems={removeItems} />}
+      {tab === 'budget' && <BudgetTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
+      {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
+      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} askConfirm={askConfirm} />}
+      {tab === 'report' && <ReportTab data={data} addItems={addItems} removeItems={removeItems} askConfirm={askConfirm} />}
       {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} />}
+
+      {confirmDialog && (
+        <div className="confirm-overlay" onClick={() => risolviConfirm(false)}>
+          <div className="confirm-box" onClick={e => e.stopPropagation()}>
+            <div className="confirm-msg">{confirmDialog.message}</div>
+            <div className="confirm-actions">
+              <button className="btn" onClick={() => risolviConfirm(false)}>Annulla</button>
+              <button className="btn danger" onClick={() => risolviConfirm(true)}>🗑 Elimina</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── BUDGET TAB ─────────────────────────────────────────────────────────────────
-function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
+function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfirm }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -745,8 +791,9 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
     setForm({ desc: '', amount: '', cat: '', subcat: '', date: localDateStr() });
     setShowAddSpesa(false);
   }
-  function deleteSpesa(item) {
-    if (!window.confirm(`Eliminare la spesa "${item.desc}" (${formatEuro(item.amount)})?`)) return;
+  async function deleteSpesa(item) {
+    const ok = await askConfirm(`Eliminare la spesa "${item.desc}" (${formatEuro(item.amount)})?`);
+    if (!ok) return;
     removeItems('spese', [item]);
   }
   function startEditSpesa(s) {
@@ -769,8 +816,9 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
     setFormE({ desc: '', amount: '', date: localDateStr() });
     setShowAddEntrata(false);
   }
-  function deleteEntrata(item) {
-    if (!window.confirm(`Eliminare l'entrata "${item.desc}" (${formatEuro(item.amount)})?`)) return;
+  async function deleteEntrata(item) {
+    const ok = await askConfirm(`Eliminare l'entrata "${item.desc}" (${formatEuro(item.amount)})?`);
+    if (!ok) return;
     removeItems('entrate', [item]);
   }
 
@@ -985,7 +1033,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem }) {
 }
 
 // ── SCADENZE TAB ───────────────────────────────────────────────────────────────
-function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
+function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askConfirm }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false });
   const [editId, setEditId] = useState(null);
@@ -1059,12 +1107,15 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem }) {
     setPayDate(item.dataPagamento || localDateStr());
     setPayDateId(item.id);
   }
-  function del(item) {
-    if (!window.confirm(`Eliminare la scadenza "${item.nome}"?`)) return;
+  async function del(item) {
+    const ok = await askConfirm(`Eliminare la scadenza "${item.nome}"?`);
+    if (!ok) return;
     removeItems('scadenze', [item]);
   }
-  function delGruppo(gruppoId, scadenzaId) {
+  async function delGruppo(gruppoId, scadenzaId) {
     const daRimuovere = (data.scadenze || []).filter(s => s.id === scadenzaId || s.gruppoId === gruppoId || s.id === gruppoId);
+    const ok = await askConfirm(`Eliminare tutte le rate di questo gruppo ricorrente (${daRimuovere.length} rate)?`);
+    if (!ok) return;
     removeItems('scadenze', daRimuovere);
   }
   // Estende un gruppo ricorrente generando altre 12 occorrenze a partire dall'ultima esistente
@@ -1506,7 +1557,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
 }
 
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
-function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate }) {
+function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, askConfirm }) {
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
@@ -1645,12 +1696,14 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     setQuickPriceId(null);
     setQuickPrice('');
   }
-  function del(item) {
-    if (!window.confirm(`Eliminare "${item.nome}" dalla lista?`)) return;
+  async function del(item) {
+    const ok = await askConfirm(`Eliminare "${item.nome}" dalla lista?`);
+    if (!ok) return;
     removeItems('listaSpesa', [item]);
   }
-  function clearChecked() {
-    if (!window.confirm(`Svuotare ${presi.length} articolo${presi.length > 1 ? 'i' : ''} già pres${presi.length > 1 ? 'i' : 'o'} SENZA registrarli come spesa? L'azione non è annullabile.`)) return;
+  async function clearChecked() {
+    const ok = await askConfirm(`Svuotare ${presi.length} articolo${presi.length > 1 ? 'i' : ''} già pres${presi.length > 1 ? 'i' : 'o'} SENZA registrarli come spesa? L'azione non è annullabile.`);
+    if (!ok) return;
     removeItems('listaSpesa', presi);
   }
   // ── BOZZE LOCALI per quantità/prezzi ──────────────────────────────────────
@@ -1714,12 +1767,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
   // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
   // (un'unica operazione atomica: aggiunge le spese e rimuove gli articoli presi insieme)
-  function registraSpesa() {
+  async function registraSpesa() {
     const conPrezzo = presi.filter(i => (parseNumIT(i.prezzoTotale) || 0) > 0);
     const senzaPrezzo = presi.filter(i => !((parseNumIT(i.prezzoTotale) || 0) > 0));
     if (senzaPrezzo.length > 0) {
       const nomi = senzaPrezzo.map(i => i.nome).join(', ');
-      const ok = window.confirm(
+      const ok = await askConfirm(
         `${senzaPrezzo.length} articolo${senzaPrezzo.length > 1 ? 'i' : ''} senza prezzo (${nomi}) ${senzaPrezzo.length > 1 ? 'non verranno registrati' : 'non verrà registrato'}.\n\nProcedere comunque?`
       );
       if (!ok) return;
@@ -1993,7 +2046,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 }
 
 // ── REPORT TAB ─────────────────────────────────────────────────────────────────
-function ReportTab({ data, addItems, removeItems }) {
+function ReportTab({ data, addItems, removeItems, askConfirm }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -2076,8 +2129,9 @@ function ReportTab({ data, addItems, removeItems }) {
     setFormBP({ tipo: 'ricevuto', desc: '', qty: '', amount: '', date: localDateStr() });
     setShowBP(false);
   }
-  function delBP(item) {
-    if (!window.confirm(`Eliminare il movimento "${item.desc}"?`)) return;
+  async function delBP(item) {
+    const ok = await askConfirm(`Eliminare il movimento "${item.desc}"?`);
+    if (!ok) return;
     removeItems('buoniPasto', [item]);
   }
 
