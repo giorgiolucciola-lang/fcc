@@ -358,7 +358,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v26";
+const APP_VERSION = "v27";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1211,7 +1211,14 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     setEditId(null);
   }
 
-  const sorted = [...(data.scadenze || [])].sort((a, b) => a.date.localeCompare(b.date));
+  // Data usata per ORDINARE l'elenco: per le rate già pagate si usa la data effettiva
+  // di pagamento (non quella di scadenza), così una rata pagata in anticipo scavalca
+  // correttamente le rate ancora da pagare con scadenza precedente. Per le rate non
+  // pagate resta invariato: si usa la data di scadenza.
+  function dataOrdinamento(s) {
+    return (s.pagato && s.dataPagamento) ? s.dataPagamento : s.date;
+  }
+  const sorted = [...(data.scadenze || [])].sort((a, b) => dataOrdinamento(a).localeCompare(dataOrdinamento(b)));
   // Nomi già usati in passato per le scadenze, per il completamento automatico del campo Nome
   const nomiScadenzeNote = Array.from(new Set((data.scadenze || []).map(s => s.nome).filter(Boolean)));
 
