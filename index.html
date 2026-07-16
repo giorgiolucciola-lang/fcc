@@ -484,6 +484,8 @@
   <span class="reset-link" onclick="resetStats()">Azzera statistiche</span>
 </div>
 
+<div class="app-footer">English Practice · v1.1 · 16 luglio 2026</div>
+
 <script>
 const SHEET_ID = '1ACOJ63Q9Jq8Npn8srEqIf-8xUjOVeJaWbdjp6Y4DVcY'; // Esercitazione Verbi Irregolari e Vocaboli
 
@@ -734,6 +736,7 @@ function doResetQuiz() {
   localStorage.setItem('ep_errors', JSON.stringify(errorLog));
   updateErrCount();
   updateNavScore();
+  if (document.getElementById('sec-errors').classList.contains('active')) renderErrors();
   // Forza ordine casuale indipendentemente dal selettore
   const mode = document.getElementById('mode-select').value;
   let words = mode==='verbs' ? RAW.filter(w=>w.type==='verb') : mode==='vocab' ? RAW.filter(w=>w.type==='vocab') : RAW;
@@ -862,6 +865,7 @@ function markAsCorrect() {
   localStorage.setItem('ep_errors', JSON.stringify(errorLog));
   updateErrCount();
   updateNavScore();
+  if (document.getElementById('sec-errors').classList.contains('active')) renderErrors();
   document.getElementById('feedback').textContent = '✓ Corretto!';
   document.getElementById('feedback').className = 'feedback-msg correct';
   document.getElementById('correct-reveal').innerHTML = '';
