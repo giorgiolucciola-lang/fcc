@@ -248,6 +248,7 @@ select:required:valid:not(:focus) {
 .spesa-lista-item.checked { opacity: 0.5; text-decoration: line-through; }
 .spesa-lista-item input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
 .spesa-lista-item .qta-input { width: 40px; padding: 6px 4px; font-size: 13px; text-align: center; flex-shrink: 0; }
+.spesa-lista-item .unita-select { width: 52px; padding: 6px 2px; font-size: 12px; flex-shrink: 0; }
 .spesa-lista-item .prezzo-input { width: 64px; padding: 6px 6px; font-size: 13px; flex-shrink: 0; }
 .spesa-lista-item .prezzo-input.tot { font-weight: 700; }
 .spesa-lista-item .bp-btn { flex-shrink: 0; padding: 5px 8px; }
@@ -347,6 +348,7 @@ select:required:valid:not(:focus) {
   .form-group { min-width: 90px; }
 
   .spesa-lista-item .qta-input { width: 50px; font-size: 16px; padding: 9px 4px; }
+  .spesa-lista-item .unita-select { width: 58px; font-size: 13px; padding: 9px 2px; }
   .spesa-lista-item .prezzo-input { width: 76px; font-size: 16px; padding: 9px 6px; }
   .spesa-lista-item .bp-btn { padding: 8px 11px; font-size: 14px; }
 }
@@ -358,7 +360,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v27";
+const APP_VERSION = "v28";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -518,6 +520,14 @@ const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'P
 // (es. Supermercato, Fruttivendolo, Farmacia...). Concetto separato dalla categoria
 // del prodotto: la categoria dice COSA è, la tappa dice DOVE si compra.
 const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia', 'Altro'];
+// Unità di misura per la quantità nella lista della spesa: dice se il numero in "Qtà"
+// rappresenta pezzi, chili, etti o litri, così non resta ambiguo (es. "2" di cosa?)
+const UNITA_OPZIONI = [
+  { v: 'pz', label: 'pz' },
+  { v: 'kg', label: 'kg' },
+  { v: 'hg', label: 'etti' },
+  { v: 'l', label: 'litri' },
+];
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 function App() {
@@ -1501,9 +1511,12 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const wrapRef = useRef(null);
 
+  // Se il campo è vuoto, mostra comunque tutte le opzioni disponibili (fino a 8): prima questa
+  // correzione il menu restava vuoto finché non si iniziava a digitare, facendo sembrare il
+  // campo "morto" al primo tocco.
   const filtered = value.trim()
     ? options.filter(o => o.toLowerCase().includes(value.trim().toLowerCase()) && o.toLowerCase() !== value.trim().toLowerCase()).slice(0, 8)
-    : [];
+    : options.slice(0, 8);
 
   useEffect(() => {
     function handleOutside(e) {
@@ -1566,7 +1579,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, askConfirm }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+  const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', unita: 'pz', prezzoUnitario: '', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
   const [newSottocatInline, setNewSottocatInline] = useState('');
@@ -1632,7 +1645,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const nomeTrim = form.nome.trim();
     const catTrim = form.cat.trim();
     const sottocatTrim = form.sottocat.trim();
-    const item = { id: Date.now(), nome: nomeTrim, cat: catTrim || 'Altro', sottocat: sottocatTrim, tappa: form.tappa || 'Altro', qta: form.qta || '1', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
+    const item = { id: Date.now(), nome: nomeTrim, cat: catTrim || 'Altro', sottocat: sottocatTrim, tappa: form.tappa || 'Altro', qta: form.qta || '1', unita: form.unita || 'pz', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
     addItems('listaSpesa', [item]);
     // Salva il nome nello storico prodotti (persiste anche dopo "Registra spesa", a differenza
     // della lista stessa), così il completamento automatico funziona anche per articoli già acquistati
@@ -1651,7 +1664,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       sottocats[catTrim] = [...(sottocats[catTrim] || []), sottocatTrim];
       saveData({ sottocategorieLista: sottocats });
     }
-    setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', prezzoUnitario: '', prezzoTotale: '' });
+    setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', unita: form.unita || 'pz', prezzoUnitario: '', prezzoTotale: '' });
   }
   // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
   // Usa parseNumIT (non parseFloat) per capire correttamente anche i valori scritti con la virgola (es. "0,500")
@@ -1725,7 +1738,14 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function draftVal(item, field) {
     const d = drafts[item.id];
     if (d && d[field] !== undefined) return d[field];
-    return item[field] || (field === 'qta' ? '1' : '');
+    if (field === 'qta') return item[field] || '1';
+    if (field === 'unita') return item[field] || 'pz';
+    return item[field] || '';
+  }
+  function setDraftUnita(item, val) {
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], unita: val } }));
+    // L'unità non richiede conferma separata: si salva subito, non c'è calcolo da aspettare
+    updateItem('listaSpesa', item, { ...item, unita: val });
   }
   function setDraftQta(item, val) {
     const unitNum = parseNumIT(draftVal(item, 'prezzoUnitario'));
@@ -1835,6 +1855,9 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             onBlur={() => commitDraft(item)}
             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
             className="qta-input" />
+          <select value={draftVal(item, 'unita')} title="Unità di misura" onChange={e => setDraftUnita(item, e.target.value)} className="unita-select">
+            {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
+          </select>
           <input type="text" inputMode="decimal" placeholder="€ unit." value={draftVal(item, 'prezzoUnitario')}
             onChange={e => setDraftUnit(item, e.target.value)}
             onBlur={() => commitDraft(item)}
@@ -1957,6 +1980,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <div className="form-group" style={{maxWidth:'60px'}}>
               <label>Qtà</label>
               <input type="text" inputMode="decimal" value={form.qta} onChange={e => handleFormQtaChange(e.target.value)} />
+            </div>
+            <div className="form-group" style={{maxWidth:'70px'}}>
+              <label>Unità</label>
+              <select value={form.unita} onChange={e => setForm(f => ({...f, unita: e.target.value}))}>
+                {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
+              </select>
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
               <label>€ unità</label>
@@ -2353,6 +2382,16 @@ function ImpostazioniTab({ data, saveData }) {
   function delTappa(t) {
     saveData({ tappeLista: (data.tappeLista || DEFAULT_TAPPE).filter(x => x !== t) });
   }
+  // Sposta una tappa su/giù nell'elenco: l'ORDINE di questo elenco è quello che la Lista
+  // della spesa usa per raggruppare gli articoli (prima tappa dell'elenco = prima da fare),
+  // quindi riordinare qui equivale a definire il percorso del giro di spesa.
+  function moveTappa(idx, direzione) {
+    const lista = [...(data.tappeLista || DEFAULT_TAPPE)];
+    const nuovoIdx = idx + direzione;
+    if (nuovoIdx < 0 || nuovoIdx >= lista.length) return;
+    [lista[idx], lista[nuovoIdx]] = [lista[nuovoIdx], lista[idx]];
+    saveData({ tappeLista: lista });
+  }
 
   return (
     <div className="section active">
@@ -2381,9 +2420,15 @@ function ImpostazioniTab({ data, saveData }) {
 
         <div className="setting-section" style={{marginTop:'20px'}}>
           <div className="setting-label">Tappe (negozi) lista spesa</div>
-          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>Usate per raggruppare la lista della spesa per giro/negozio (es. Fruttivendolo, Supermercato, Farmacia...)</div>
-          <div>{(data.tappeLista || DEFAULT_TAPPE).map(t => (
-            <span className="cat-chip" key={t}>{t}<button onClick={() => delTappa(t)}>✕</button></span>
+          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>L'ordine qui sotto è quello del tuo giro di spesa: la prima tappa dell'elenco è quella da fare per prima. Usa ▲▼ per riordinarle.</div>
+          <div>{(data.tappeLista || DEFAULT_TAPPE).map((t, idx, arr) => (
+            <div key={t} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'8px 10px',marginBottom:'6px'}}>
+              <span style={{fontSize:'12px',color:'var(--text3)',fontWeight:'700',minWidth:'18px'}}>{idx + 1}</span>
+              <span style={{flex:1,fontSize:'14px'}}>{t}</span>
+              <button className="btn small" disabled={idx === 0} style={idx === 0 ? {opacity:0.3} : {}} onClick={() => moveTappa(idx, -1)} title="Sposta su">▲</button>
+              <button className="btn small" disabled={idx === arr.length - 1} style={idx === arr.length - 1 ? {opacity:0.3} : {}} onClick={() => moveTappa(idx, 1)} title="Sposta giù">▼</button>
+              <button className="btn small danger" onClick={() => delTappa(t)} title="Elimina tappa">✕</button>
+            </div>
           ))}</div>
           <div className="form-row" style={{marginTop:'10px'}}>
             <input type="text" placeholder="Nuova tappa..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
