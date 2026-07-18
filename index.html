@@ -360,7 +360,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v28";
+const APP_VERSION = "v29";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2382,14 +2382,31 @@ function ImpostazioniTab({ data, saveData }) {
   function delTappa(t) {
     saveData({ tappeLista: (data.tappeLista || DEFAULT_TAPPE).filter(x => x !== t) });
   }
-  // Sposta una tappa su/giù nell'elenco: l'ORDINE di questo elenco è quello che la Lista
-  // della spesa usa per raggruppare gli articoli (prima tappa dell'elenco = prima da fare),
-  // quindi riordinare qui equivale a definire il percorso del giro di spesa.
-  function moveTappa(idx, direzione) {
+  // Riordino delle tappe tramite numero digitato (invece delle freccette ▲▼):
+  // l'ORDINE di questo elenco è quello che la Lista della spesa usa per raggruppare
+  // gli articoli (prima tappa dell'elenco = prima da fare), quindi cambiare qui il
+  // numero di posizione di una tappa equivale a spostarla nel percorso del giro di spesa.
+  // Bozza locale mentre si digita (stesso pattern usato per i prezzi nella Lista della
+  // spesa): il riordino vero e proprio avviene solo su blur/Invio, non ad ogni cifra.
+  const [tappaPosDrafts, setTappaPosDrafts] = useState({});
+  function tappaPosVal(t, idx) {
+    return tappaPosDrafts[t] !== undefined ? tappaPosDrafts[t] : String(idx + 1);
+  }
+  function setTappaPosDraft(t, val) {
+    setTappaPosDrafts(d => ({ ...d, [t]: val }));
+  }
+  function commitTappaPos(t, idx) {
     const lista = [...(data.tappeLista || DEFAULT_TAPPE)];
-    const nuovoIdx = idx + direzione;
-    if (nuovoIdx < 0 || nuovoIdx >= lista.length) return;
-    [lista[idx], lista[nuovoIdx]] = [lista[nuovoIdx], lista[idx]];
+    const raw = tappaPosDrafts[t];
+    setTappaPosDrafts(d => { const p = { ...d }; delete p[t]; return p; });
+    if (raw === undefined) return;
+    let nuovaPos = parseInt(raw, 10);
+    if (isNaN(nuovaPos)) return;
+    nuovaPos = Math.max(1, Math.min(lista.length, nuovaPos));
+    const targetIdx = nuovaPos - 1;
+    if (targetIdx === idx) return;
+    const [item] = lista.splice(idx, 1);
+    lista.splice(targetIdx, 0, item);
     saveData({ tappeLista: lista });
   }
 
@@ -2420,13 +2437,22 @@ function ImpostazioniTab({ data, saveData }) {
 
         <div className="setting-section" style={{marginTop:'20px'}}>
           <div className="setting-label">Tappe (negozi) lista spesa</div>
-          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>L'ordine qui sotto è quello del tuo giro di spesa: la prima tappa dell'elenco è quella da fare per prima. Usa ▲▼ per riordinarle.</div>
+          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>L'ordine qui sotto è quello del tuo giro di spesa: la prima tappa dell'elenco è quella da fare per prima. Scrivi il numero di posizione per spostare una tappa.</div>
           <div>{(data.tappeLista || DEFAULT_TAPPE).map((t, idx, arr) => (
             <div key={t} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'8px 10px',marginBottom:'6px'}}>
-              <span style={{fontSize:'12px',color:'var(--text3)',fontWeight:'700',minWidth:'18px'}}>{idx + 1}</span>
+              <input
+                type="number"
+                min="1"
+                max={arr.length}
+                inputMode="numeric"
+                value={tappaPosVal(t, idx)}
+                onChange={e => setTappaPosDraft(t, e.target.value)}
+                onBlur={() => commitTappaPos(t, idx)}
+                onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                style={{width:'44px',padding:'6px 4px',fontSize:'13px',textAlign:'center',flexShrink:0}}
+                title="Posizione nel giro di spesa"
+              />
               <span style={{flex:1,fontSize:'14px'}}>{t}</span>
-              <button className="btn small" disabled={idx === 0} style={idx === 0 ? {opacity:0.3} : {}} onClick={() => moveTappa(idx, -1)} title="Sposta su">▲</button>
-              <button className="btn small" disabled={idx === arr.length - 1} style={idx === arr.length - 1 ? {opacity:0.3} : {}} onClick={() => moveTappa(idx, 1)} title="Sposta giù">▼</button>
               <button className="btn small danger" onClick={() => delTappa(t)} title="Elimina tappa">✕</button>
             </div>
           ))}</div>
