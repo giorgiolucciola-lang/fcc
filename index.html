@@ -252,6 +252,10 @@ select:required:valid:not(:focus) {
 .spesa-lista-item .prezzo-input { width: 64px; padding: 6px 6px; font-size: 13px; flex-shrink: 0; }
 .spesa-lista-item .prezzo-input.tot { font-weight: 700; }
 .spesa-lista-item .bp-btn { flex-shrink: 0; padding: 5px 8px; }
+/* Su schermi larghi il wrapper non deve introdurre un box proprio: i suoi figli
+   (checkbox + nome) restano semplici elementi diretti della riga flessibile,
+   esattamente come prima. Diventa un vero flex box solo sotto i 480px (v30). */
+.spesa-nome-row { display: contents; }
 
 /* REPORT */
 .report-cat-bar { margin-bottom: 10px; }
@@ -351,6 +355,17 @@ select:required:valid:not(:focus) {
   .spesa-lista-item .unita-select { width: 58px; font-size: 13px; padding: 9px 2px; }
   .spesa-lista-item .prezzo-input { width: 76px; font-size: 16px; padding: 9px 6px; }
   .spesa-lista-item .bp-btn { padding: 8px 11px; font-size: 14px; }
+
+  /* Checkbox + nome prodotto su una riga propria a tutta larghezza: così i campi
+     quantità/prezzo, non trovando più spazio nella stessa riga, scendono automaticamente
+     sotto invece di sovrapporsi visivamente al testo del nome (bug corretto in v30). */
+  .spesa-nome-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 </style>
 </head>
@@ -360,7 +375,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v29";
+const APP_VERSION = "v32";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -402,7 +417,7 @@ function formatDataIT(dateStr) {
   return `${d}/${m}/${y}`;
 }
 function formatEuro(n) {
-  return '€ ' + Number(n || 0).toFixed(2).replace('.', ',');
+  return '€ ' + Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 // Converte in numero un valore scritto "all'italiana" (virgola come separatore decimale,
 // es. "0,500" o "3,5"): senza questa conversione, JavaScript si ferma alla virgola e legge
@@ -521,11 +536,11 @@ const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'P
 // del prodotto: la categoria dice COSA è, la tappa dice DOVE si compra.
 const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia', 'Altro'];
 // Unità di misura per la quantità nella lista della spesa: dice se il numero in "Qtà"
-// rappresenta pezzi, chili, etti o litri, così non resta ambiguo (es. "2" di cosa?)
+// rappresenta pezzi, chili, grammi o litri, così non resta ambiguo (es. "2" di cosa?)
 const UNITA_OPZIONI = [
   { v: 'pz', label: 'pz' },
   { v: 'kg', label: 'kg' },
-  { v: 'hg', label: 'etti' },
+  { v: 'g', label: 'gr' },
   { v: 'l', label: 'litri' },
 ];
 
@@ -1510,6 +1525,11 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
   const [open, setOpen] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const wrapRef = useRef(null);
+  // Tracciano il tocco in corso per distinguere un tap (selezione) da uno scorrimento
+  // del menu: prima, selezionare accadeva già su onTouchStart, quindi il primo tocco
+  // per iniziare a scorrere selezionava subito la voce toccata, impedendo lo scroll.
+  const touchStartYRef = useRef(null);
+  const touchMovedRef = useRef(false);
 
   // Se il campo è vuoto, mostra comunque tutte le opzioni disponibili (fino a 8): prima questa
   // correzione il menu restava vuoto finché non si iniziava a digitare, facendo sembrare il
@@ -1564,7 +1584,16 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
             <div
               key={opt}
               onMouseDown={e => { e.preventDefault(); selectOption(opt); }}
-              onTouchStart={e => { e.preventDefault(); selectOption(opt); }}
+              onTouchStart={e => { touchStartYRef.current = e.touches[0].clientY; touchMovedRef.current = false; }}
+              onTouchMove={e => {
+                if (touchStartYRef.current !== null && Math.abs(e.touches[0].clientY - touchStartYRef.current) > 8) {
+                  touchMovedRef.current = true;
+                }
+              }}
+              onTouchEnd={e => {
+                if (!touchMovedRef.current) { e.preventDefault(); selectOption(opt); }
+                touchStartYRef.current = null;
+              }}
               style={{ padding: '9px 12px', fontSize: '14px', cursor: 'pointer', background: i === highlightIdx ? 'var(--accent-light)' : 'transparent' }}
             >
               {opt}
@@ -1845,10 +1874,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       <div key={item.id}>
         <div className={`spesa-lista-item${item.checked?' checked':''}`}
           style={bp ? {background:'var(--salmon-bg)', borderColor:'var(--salmon-border)'} : {}}>
-          <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
-          <div style={{flex:1, minWidth:0, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>
-            <div>{item.nome}</div>
-            <div className="spesa-cat">{item.cat}{item.sottocat ? ` › ${item.sottocat}` : ''}</div>
+          <div className="spesa-nome-row">
+            <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
+            <div style={{flex:1, minWidth:0, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>
+              <div style={{overflowWrap:'break-word', wordBreak:'break-word'}}>{item.nome}</div>
+              <div className="spesa-cat">{item.cat}{item.sottocat ? ` › ${item.sottocat}` : ''}</div>
+            </div>
           </div>
           <input type="text" inputMode="numeric" pattern="[0-9]*" value={draftVal(item, 'qta')} title="Quantità"
             onChange={e => setDraftQta(item, e.target.value)}
@@ -1858,7 +1889,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <select value={draftVal(item, 'unita')} title="Unità di misura" onChange={e => setDraftUnita(item, e.target.value)} className="unita-select">
             {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
           </select>
-          <input type="text" inputMode="decimal" placeholder="€ unit." value={draftVal(item, 'prezzoUnitario')}
+          <input type="text" inputMode="decimal" placeholder="€ Euro" value={draftVal(item, 'prezzoUnitario')}
             onChange={e => setDraftUnit(item, e.target.value)}
             onBlur={() => commitDraft(item)}
             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
@@ -1896,7 +1927,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
             <input
               ref={quickPriceInputRef}
-              type="text" inputMode="decimal" placeholder="€ unit."
+              type="text" inputMode="decimal" placeholder="€ Euro"
               value={quickPrice}
               onChange={e => setQuickPrice(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && confermaQuickPrice(item)}
@@ -1918,8 +1949,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // Totale corrente degli articoli marcati "buono pasto" (presi + da prendere): serve per
   // controllare al volo, durante la spesa, di non superare il limite giornaliero dei buoni pasto
   const itemsBP = lista.filter(i => i.buonoPasto);
-  const totBPLista = itemsBP.reduce((a, i) => a + (parseNumIT(i.prezzoTotale) || 0), 0);
-  const totBPPresi = presi.filter(i => i.buonoPasto).reduce((a, i) => a + (parseNumIT(i.prezzoTotale) || 0), 0);
+  const totBPLista = itemsBP.reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0);
+  const totBPPresi = presi.filter(i => i.buonoPasto).reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0);
 
   // Raggruppa per tappa (negozio): l'ordine delle sezioni segue l'ordine delle tappe
   // definito in Impostazioni, così la lista rispecchia il giro che si vuole fare
@@ -1988,7 +2019,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               </select>
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
-              <label>€ unità</label>
+              <label>€ Euro</label>
               <input type="text" inputMode="decimal" placeholder="0,00" value={form.prezzoUnitario} onChange={e => handleFormUnitChange(e.target.value)} />
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
@@ -2058,7 +2089,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
       {daPrendere.length > 0 && (
         <div style={{textAlign:'right',fontSize:'13px',fontWeight:700,color:'var(--text2)',padding:'2px 4px 12px'}}>
-          Totale da prendere (stima): {formatEuro(daPrendere.reduce((a, i) => a + (parseNumIT(i.prezzoTotale) || 0), 0))}
+          Totale da prendere (stima): {formatEuro(daPrendere.reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0))}
         </div>
       )}
 
@@ -2067,7 +2098,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
             <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em'}}>✓ Già presi</div>
             <div style={{fontSize:'13px',fontWeight:700,color:'var(--green)'}}>
-              Totale: {formatEuro(presi.reduce((a, i) => a + (parseNumIT(i.prezzoTotale) || 0), 0))}
+              Totale: {formatEuro(presi.reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0))}
               {totBPPresi > 0 && <span style={{color:'var(--salmon)',fontWeight:600}}> (di cui 🍱 {formatEuro(totBPPresi)})</span>}
             </div>
           </div>
@@ -2355,8 +2386,8 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
 // ── IMPOSTAZIONI TAB ───────────────────────────────────────────────────────────
 function ImpostazioniTab({ data, saveData }) {
   const [newCat, setNewCat] = useState('');
-  const [newCatLista, setNewCatLista] = useState('');
   const [newTappa, setNewTappa] = useState('');
+  const [newProdotto, setNewProdotto] = useState('');
 
   function addCat() {
     if (!newCat.trim()) return;
@@ -2366,13 +2397,20 @@ function ImpostazioniTab({ data, saveData }) {
   function delCat(c) {
     saveData({ categorie: (data.categorie || DEFAULT_CATS).filter(x => x !== c) });
   }
-  function addCatLista() {
-    if (!newCatLista.trim()) return;
-    saveData({ categorieLista: [...(data.categorieLista || DEFAULT_SPESA_CATS), newCatLista.trim()] });
-    setNewCatLista('');
+  // Database Prodotti: stesso elenco (storicoProdotti) che alimenta il completamento
+  // automatico del campo "Prodotto" nella Lista della spesa. Un prodotto scritto per la
+  // prima volta lì si aggiunge da solo qui; da qui puoi anche ripulirlo manualmente
+  // (es. refusi o articoli che non comprerai più) o aggiungerne uno in anticipo.
+  function addProdotto() {
+    if (!newProdotto.trim()) return;
+    const attuali = data.storicoProdotti || [];
+    if (!attuali.includes(newProdotto.trim())) {
+      saveData({ storicoProdotti: [...attuali, newProdotto.trim()] });
+    }
+    setNewProdotto('');
   }
-  function delCatLista(c) {
-    saveData({ categorieLista: (data.categorieLista || DEFAULT_SPESA_CATS).filter(x => x !== c) });
+  function delProdotto(p) {
+    saveData({ storicoProdotti: (data.storicoProdotti || []).filter(x => x !== p) });
   }
   function addTappa() {
     if (!newTappa.trim()) return;
@@ -2425,13 +2463,17 @@ function ImpostazioniTab({ data, saveData }) {
         </div>
 
         <div className="setting-section" style={{marginTop:'20px'}}>
-          <div className="setting-label">Categoria prodotti</div>
-          <div>{(data.categorieLista || DEFAULT_SPESA_CATS).map(c => (
-            <span className="cat-chip" key={c}>{c}<button onClick={() => delCatLista(c)}>✕</button></span>
+          <div className="setting-label">Database Prodotti</div>
+          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>
+            Elenco dei prodotti già scritti nella Lista della spesa: quando digiti un prodotto nuovo lì, si aggiunge qui da solo; da qui puoi anche ripulire refusi o aggiungerne uno in anticipo. Questo elenco è quello usato per i suggerimenti del campo "Prodotto".
+          </div>
+          <div>{[...(data.storicoProdotti || [])].sort((a, b) => a.localeCompare(b, 'it')).map(p => (
+            <span className="cat-chip" key={p}>{p}<button onClick={() => delProdotto(p)}>✕</button></span>
           ))}</div>
+          {(!data.storicoProdotti || data.storicoProdotti.length === 0) && <div className="empty" style={{padding:'12px'}}>Ancora nessun prodotto registrato</div>}
           <div className="form-row" style={{marginTop:'10px'}}>
-            <input type="text" placeholder="Nuova categoria..." value={newCatLista} onChange={e => setNewCatLista(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCatLista()} style={{flex:1}} />
-            <button className="btn primary" onClick={addCatLista}>Aggiungi</button>
+            <input type="text" placeholder="Nuovo prodotto..." value={newProdotto} onChange={e => setNewProdotto(e.target.value)} onKeyDown={e => e.key === 'Enter' && addProdotto()} style={{flex:1}} />
+            <button className="btn primary" onClick={addProdotto}>Aggiungi</button>
           </div>
         </div>
 
