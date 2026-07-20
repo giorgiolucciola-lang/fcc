@@ -375,7 +375,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v34";
+const APP_VERSION = "v35";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1664,31 +1664,36 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     }
   }, [quickPriceId]);
 
+  // Aggiunta di categoria/sottocategoria/tappa "al volo" dal form: usa scritture ATOMICHE
+  // (arrayUnion, anche su campo annidato per le sottocategorie tramite dot-notation)
+  // invece di saveData (che riscrive tutto il documento). Prima di questa correzione,
+  // se si aggiungeva una nuova categoria e subito dopo una nuova sottocategoria (o si
+  // aggiungeva un articolo alla lista quasi nello stesso istante), la seconda scrittura
+  // "vecchio stile" poteva sovrascrivere e far sparire la modifica appena fatta dalla prima
+  // (bug segnalato da Giorgio: la categoria "Cibo" spariva al secondo inserimento).
   function addCatInline() {
-    if (!newCatInline.trim()) return;
-    const cats = [...catList, newCatInline.trim()];
-    saveData({ categorieLista: cats });
-    setForm(f => ({ ...f, cat: newCatInline.trim() }));
+    const nuova = newCatInline.trim();
+    if (!nuova) return;
+    applyUpdate({ categorieLista: firebase.firestore.FieldValue.arrayUnion(nuova) });
+    setForm(f => ({ ...f, cat: nuova }));
     setNewCatInline('');
     setShowNewCat(false);
   }
 
   function addSottocatInline() {
-    if (!newSottocatInline.trim() || !form.cat) return;
-    const sottocats = { ...(data.sottocategorieLista || {}) };
-    if (!sottocats[form.cat]) sottocats[form.cat] = [];
-    sottocats[form.cat] = [...sottocats[form.cat], newSottocatInline.trim()];
-    saveData({ sottocategorieLista: sottocats });
-    setForm(f => ({ ...f, sottocat: newSottocatInline.trim() }));
+    const nuova = newSottocatInline.trim();
+    if (!nuova || !form.cat) return;
+    applyUpdate({ [`sottocategorieLista.${form.cat}`]: firebase.firestore.FieldValue.arrayUnion(nuova) });
+    setForm(f => ({ ...f, sottocat: nuova }));
     setNewSottocatInline('');
     setShowNewSottocat(false);
   }
 
   function addTappaInline() {
-    if (!newTappaInline.trim()) return;
-    const tappe = [...tappaList, newTappaInline.trim()];
-    saveData({ tappeLista: tappe });
-    setForm(f => ({ ...f, tappa: newTappaInline.trim() }));
+    const nuova = newTappaInline.trim();
+    if (!nuova) return;
+    applyUpdate({ tappeLista: firebase.firestore.FieldValue.arrayUnion(nuova) });
+    setForm(f => ({ ...f, tappa: nuova }));
     setNewTappaInline('');
     setShowNewTappa(false);
   }
@@ -1707,15 +1712,18 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     }
     // Il campo Categoria ora è testo libero con suggerimenti: se è stata digitata una
     // categoria nuova (non ancora in archivio), la aggiunge da sola all'elenco, così
-    // sarà suggerita anche la prossima volta
+    // sarà suggerita anche la prossima volta. Scrittura atomica (arrayUnion): non
+    // rischia più di essere persa se parte insieme ad altre scritture (es. la
+    // sottocategoria qui sotto, o l'articolo appena aggiunto sopra).
     if (catTrim && !catList.includes(catTrim)) {
-      saveData({ categorieLista: [...catList, catTrim] });
+      applyUpdate({ categorieLista: firebase.firestore.FieldValue.arrayUnion(catTrim) });
     }
-    // Stessa logica per la sottocategoria, archiviata sotto la categoria scelta
+    // Stessa logica per la sottocategoria, archiviata sotto la categoria scelta.
+    // Anche qui scrittura atomica su campo annidato (dot-notation), invece di
+    // saveData: era proprio questa la causa del bug segnalato da Giorgio (la
+    // categoria appena salvata spariva al secondo inserimento).
     if (catTrim && sottocatTrim && !sottocatList.includes(sottocatTrim)) {
-      const sottocats = { ...(data.sottocategorieLista || {}) };
-      sottocats[catTrim] = [...(sottocats[catTrim] || []), sottocatTrim];
-      saveData({ sottocategorieLista: sottocats });
+      applyUpdate({ [`sottocategorieLista.${catTrim}`]: firebase.firestore.FieldValue.arrayUnion(sottocatTrim) });
     }
     setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', unita: form.unita || 'pz', prezzoUnitario: '', prezzoTotale: '' });
   }
