@@ -375,7 +375,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v33";
+const APP_VERSION = "v34";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -428,6 +428,30 @@ function parseNumIT(v) {
   const s = String(v).trim().replace(',', '.');
   if (s === '') return NaN;
   return parseFloat(s);
+}
+// Calcola il prezzo totale (qtà × prezzo unitario) tenendo conto di COSA significa il prezzo
+// unitario in base all'unità di misura scelta:
+// - "gr" (grammi): il prezzo digitato si intende ALL'ETTO (ogni 100 grammi), come indicato
+//   di norma ai banchi salumeria/gastronomia/macelleria (es. "3,40 € all'etto"). Prima di
+//   questa correzione il prezzo veniva invece moltiplicato per i grammi as-is, gonfiando il
+//   totale di 100 volte (250 g × 3,40 €/etto dava 850 € invece di 8,50 €).
+// - "kg", "l", "pz": il prezzo è per l'intera unità (al kg, al litro, al pezzo), quindi
+//   quantità e prezzo si moltiplicano direttamente senza conversioni.
+function calcolaTotaleSpesa(qta, unita, prezzoUnitario) {
+  const q = parseNumIT(qta);
+  const p = parseNumIT(prezzoUnitario);
+  if (isNaN(q) || isNaN(p)) return null;
+  const base = (unita === 'g') ? (q / 100) : q;
+  return String(Math.round(base * p * 100) / 100);
+}
+// Etichetta da mostrare accanto al campo prezzo unitario, per rendere esplicito a cosa si
+// riferisce il numero digitato (evita l'ambiguità che ha causato il bug del prosciutto: prezzo
+// scritto "3,40" pensando all'etto, ma calcolato dall'app come fosse al grammo).
+function etichettaPrezzoUnitario(unita) {
+  if (unita === 'g') return "€ all'etto";
+  if (unita === 'kg') return '€ al kg';
+  if (unita === 'l') return '€ al litro';
+  return '€ al pezzo';
 }
 function monthLabel(y, m) {
   return new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
@@ -1698,18 +1722,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
   // Usa parseNumIT (non parseFloat) per capire correttamente anche i valori scritti con la virgola (es. "0,500")
   function handleFormUnitChange(val) {
-    const qtaNum = parseNumIT(form.qta);
-    const unitNum = parseNumIT(val);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : form.prezzoTotale;
-    setForm(f => ({ ...f, prezzoUnitario: val, prezzoTotale: totaleAuto }));
+    const totaleCalc = calcolaTotaleSpesa(form.qta, form.unita, val);
+    setForm(f => ({ ...f, prezzoUnitario: val, prezzoTotale: totaleCalc !== null ? totaleCalc : f.prezzoTotale }));
   }
   // Quando cambia la QUANTITÀ nel form di aggiunta, ricalcola anch'essa il totale in automatico
   // (prima il totale si aggiornava solo cambiando il prezzo unitario, non la quantità)
   function handleFormQtaChange(val) {
-    const qtaNum = parseNumIT(val);
-    const unitNum = parseNumIT(form.prezzoUnitario);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : form.prezzoTotale;
-    setForm(f => ({ ...f, qta: val, prezzoTotale: totaleAuto }));
+    const totaleCalc = calcolaTotaleSpesa(val, form.unita, form.prezzoUnitario);
+    setForm(f => ({ ...f, qta: val, prezzoTotale: totaleCalc !== null ? totaleCalc : f.prezzoTotale }));
+  }
+  // Quando cambia l'UNITÀ (es. da "kg" a "gr"), cambia anche il significato del prezzo
+  // unitario (al kg vs all'etto): ricalcola subito il totale con la nuova unità.
+  function handleFormUnitaChange(val) {
+    const totaleCalc = calcolaTotaleSpesa(form.qta, val, form.prezzoUnitario);
+    setForm(f => ({ ...f, unita: val, prezzoTotale: totaleCalc !== null ? totaleCalc : f.prezzoTotale }));
   }
   function toggle(item) {
     if (item.checked) {
@@ -1728,10 +1754,9 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   }
   // Conferma del riquadro "prezzo rapido": salva il prezzo (se inserito) e spunta l'articolo, in un solo aggiornamento
   function confermaQuickPrice(item) {
-    const qtaNum = parseNumIT(item.qta);
-    const unitNum = parseNumIT(quickPrice);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : (quickPrice || item.prezzoTotale || '');
-    updateItem('listaSpesa', item, { ...item, prezzoUnitario: quickPrice || item.prezzoUnitario, prezzoTotale: totaleAuto, checked: true });
+    const totaleCalc = calcolaTotaleSpesa(item.qta, item.unita, quickPrice);
+    const totaleFinale = totaleCalc !== null ? totaleCalc : (quickPrice || item.prezzoTotale || '');
+    updateItem('listaSpesa', item, { ...item, prezzoUnitario: quickPrice || item.prezzoUnitario, prezzoTotale: totaleFinale, checked: true });
     setQuickPriceId(null);
     setQuickPrice('');
   }
@@ -1772,21 +1797,24 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     return item[field] || '';
   }
   function setDraftUnita(item, val) {
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], unita: val } }));
+    // Cambiare l'unità cambia anche il significato del prezzo unitario (es. da "al kg" a
+    // "all'etto"): ricalcola subito il totale con la nuova unità, usando i valori di quantità
+    // e prezzo unitario attuali (bozza in corso se presente, altrimenti quelli già salvati).
+    const qtaAttuale = draftVal(item, 'qta');
+    const prezzoAttuale = draftVal(item, 'prezzoUnitario');
+    const totaleCalc = calcolaTotaleSpesa(qtaAttuale, val, prezzoAttuale);
+    const nuovoTotale = totaleCalc !== null ? totaleCalc : draftVal(item, 'prezzoTotale');
+    setDrafts(d => { const p = { ...d }; delete p[item.id]; return p; });
     // L'unità non richiede conferma separata: si salva subito, non c'è calcolo da aspettare
-    updateItem('listaSpesa', item, { ...item, unita: val });
+    updateItem('listaSpesa', item, { ...item, unita: val, qta: qtaAttuale, prezzoUnitario: prezzoAttuale, prezzoTotale: nuovoTotale });
   }
   function setDraftQta(item, val) {
-    const unitNum = parseNumIT(draftVal(item, 'prezzoUnitario'));
-    const qtaNum = parseNumIT(val);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : draftVal(item, 'prezzoTotale');
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], qta: val, prezzoTotale: totaleAuto } }));
+    const totaleCalc = calcolaTotaleSpesa(val, draftVal(item, 'unita'), draftVal(item, 'prezzoUnitario'));
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], qta: val, prezzoTotale: totaleCalc !== null ? totaleCalc : draftVal(item, 'prezzoTotale') } }));
   }
   function setDraftUnit(item, val) {
-    const qtaNum = parseNumIT(draftVal(item, 'qta'));
-    const unitNum = parseNumIT(val);
-    const totaleAuto = (!isNaN(qtaNum) && !isNaN(unitNum)) ? String(Math.round(qtaNum * unitNum * 100) / 100) : draftVal(item, 'prezzoTotale');
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoUnitario: val, prezzoTotale: totaleAuto } }));
+    const totaleCalc = calcolaTotaleSpesa(draftVal(item, 'qta'), draftVal(item, 'unita'), val);
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoUnitario: val, prezzoTotale: totaleCalc !== null ? totaleCalc : draftVal(item, 'prezzoTotale') } }));
   }
   function setDraftTotale(item, val) {
     setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoTotale: val } }));
@@ -1889,7 +1917,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           <select value={draftVal(item, 'unita')} title="Unità di misura" onChange={e => setDraftUnita(item, e.target.value)} className="unita-select">
             {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
           </select>
-          <input type="text" inputMode="decimal" placeholder="€ Euro" value={draftVal(item, 'prezzoUnitario')}
+          <input type="text" inputMode="decimal" placeholder={etichettaPrezzoUnitario(draftVal(item, 'unita'))} title={etichettaPrezzoUnitario(draftVal(item, 'unita'))} value={draftVal(item, 'prezzoUnitario')}
             onChange={e => setDraftUnit(item, e.target.value)}
             onBlur={() => commitDraft(item)}
             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
@@ -1927,7 +1955,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
             <input
               ref={quickPriceInputRef}
-              type="text" inputMode="decimal" placeholder="€ Euro"
+              type="text" inputMode="decimal" placeholder={etichettaPrezzoUnitario(item.unita)}
               value={quickPrice}
               onChange={e => setQuickPrice(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && confermaQuickPrice(item)}
@@ -2014,12 +2042,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             </div>
             <div className="form-group" style={{maxWidth:'70px'}}>
               <label>Unità</label>
-              <select value={form.unita} onChange={e => setForm(f => ({...f, unita: e.target.value}))}>
+              <select value={form.unita} onChange={e => handleFormUnitaChange(e.target.value)}>
                 {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
               </select>
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
-              <label>€ Euro</label>
+              <label>{etichettaPrezzoUnitario(form.unita)}</label>
               <input type="text" inputMode="decimal" placeholder="0,00" value={form.prezzoUnitario} onChange={e => handleFormUnitChange(e.target.value)} />
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
@@ -2027,6 +2055,11 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               <input type="text" inputMode="decimal" placeholder="0,00" value={form.prezzoTotale} onChange={e => setForm(f => ({...f, prezzoTotale: e.target.value}))} />
             </div>
           </div>
+          {form.unita === 'g' && (
+            <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'-6px',marginBottom:'10px'}}>
+              ℹ️ Per i grammi, il prezzo si intende all'etto (ogni 100 g) — come indicato di solito ai banchi salumeria/gastronomia/macelleria.
+            </div>
+          )}
           {/* Categoria */}
           <div className="form-row">
             <div className="form-group">
