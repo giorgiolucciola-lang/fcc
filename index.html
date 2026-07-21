@@ -375,7 +375,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v35";
+const APP_VERSION = "v36";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1555,12 +1555,30 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
   const touchStartYRef = useRef(null);
   const touchMovedRef = useRef(false);
 
-  // Se il campo è vuoto, mostra comunque tutte le opzioni disponibili (fino a 8): prima questa
+  // Se il campo è vuoto, mostra comunque tutte le opzioni disponibili (fino a 10): prima questa
   // correzione il menu restava vuoto finché non si iniziava a digitare, facendo sembrare il
   // campo "morto" al primo tocco.
-  const filtered = value.trim()
-    ? options.filter(o => o.toLowerCase().includes(value.trim().toLowerCase()) && o.toLowerCase() !== value.trim().toLowerCase()).slice(0, 8)
-    : options.slice(0, 8);
+  // Quando invece si sta scrivendo, le voci che INIZIANO con il testo digitato vengono mostrate
+  // prima di quelle che lo contengono solo a metà parola (es. scrivendo "cio" deve comparire
+  // subito "Cioccolato" prima di "Formaggio cioccolatoso"). Prima di questa correzione l'ordine
+  // seguiva semplicemente la posizione nell'elenco salvato, e le categorie/prodotti aggiunti
+  // più di recente (che finiscono sempre in fondo all'elenco) restavano fuori dalle prime 8
+  // voci mostrate finché non si scriveva abbastanza da eliminare tutte le altre alternative.
+  const q = value.trim().toLowerCase();
+  let filtered;
+  if (q) {
+    const iniziaCon = [];
+    const contiene = [];
+    for (const o of options) {
+      const ol = o.toLowerCase();
+      if (ol === q) continue; // non suggerire ciò che è già stato scritto identico
+      if (ol.startsWith(q)) iniziaCon.push(o);
+      else if (ol.includes(q)) contiene.push(o);
+    }
+    filtered = [...iniziaCon, ...contiene].slice(0, 10);
+  } else {
+    filtered = options.slice(0, 10);
+  }
 
   useEffect(() => {
     function handleOutside(e) {
