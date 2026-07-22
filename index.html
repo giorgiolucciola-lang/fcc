@@ -247,6 +247,9 @@ select:required:valid:not(:focus) {
 .spesa-lista-item > span { min-width: 0; word-break: break-word; }
 .spesa-lista-item.checked { opacity: 0.5; text-decoration: line-through; }
 .spesa-lista-item input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+/* Campo numerico a inizio riga per assegnare/spostare la tappa (v37): dimensione simile
+   al quadratino del checkbox che segue subito dopo, per stare bene affiancati */
+.spesa-lista-item .tappa-pos-input { width: 26px; height: 18px; padding: 0; font-size: 12px; text-align: center; flex-shrink: 0; }
 .spesa-lista-item .qta-input { width: 40px; padding: 6px 4px; font-size: 13px; text-align: center; flex-shrink: 0; }
 .spesa-lista-item .unita-select { width: 52px; padding: 6px 2px; font-size: 12px; flex-shrink: 0; }
 .spesa-lista-item .prezzo-input { width: 64px; padding: 6px 6px; font-size: 13px; flex-shrink: 0; }
@@ -351,6 +354,7 @@ select:required:valid:not(:focus) {
 
   .form-group { min-width: 90px; }
 
+  .spesa-lista-item .tappa-pos-input { width: 34px; height: 34px; font-size: 16px; padding: 0; }
   .spesa-lista-item .qta-input { width: 50px; font-size: 16px; padding: 9px 4px; }
   .spesa-lista-item .unita-select { width: 58px; font-size: 13px; padding: 9px 2px; }
   .spesa-lista-item .prezzo-input { width: 76px; font-size: 16px; padding: 9px 6px; }
@@ -375,7 +379,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v36";
+const APP_VERSION = "v38";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1661,9 +1665,9 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const [quickPriceId, setQuickPriceId] = useState(null);
   const [quickPrice, setQuickPrice] = useState('');
   const quickPriceInputRef = useRef(null);
-  // Articolo per cui è aperto il riquadro "cambia tappa" (per spostarlo su un altro negozio)
-  const [tappaEditId, setTappaEditId] = useState(null);
-  const [tappaEditVal, setTappaEditVal] = useState('');
+  // Bozza locale per il campo numerico "tappa" a inizio riga (stesso pattern di qta/prezzi:
+  // mentre si digita il numero resta solo in memoria, si applica su blur/Invio)
+  const [tappaPosDrafts, setTappaPosDrafts] = useState({});
 
   // Nomi prodotto già usati in passato (storico persistente + articoli attualmente in lista),
   // per il completamento automatico del campo "Prodotto"
@@ -1860,19 +1864,31 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function toggleBuonoPasto(item) {
     updateItem('listaSpesa', item, { ...item, buonoPasto: !item.buonoPasto });
   }
-  // Apre il riquadro per cambiare la tappa (negozio) di un articolo già in lista
-  function apriCambiaTappa(item) {
-    setTappaEditVal(item.tappa || 'Altro');
-    setTappaEditId(item.id);
+  // Campo numerico a inizio riga per cambiare tappa: il numero corrisponde alla posizione
+  // della tappa nell'elenco di Impostazioni (stesso ordine mostrato nelle intestazioni
+  // "📍 1. Supermercato" qui sotto). Se manca una bozza in corso, mostra il numero della
+  // tappa attuale dell'articolo; altrimenti mostra quello che si sta digitando.
+  function tappaPosVal(item) {
+    if (tappaPosDrafts[item.id] !== undefined) return tappaPosDrafts[item.id];
+    const idx = tappaList.indexOf(item.tappa || 'Altro');
+    return idx >= 0 ? String(idx + 1) : '';
   }
-  function confermaCambiaTappa(item) {
-    updateItem('listaSpesa', item, { ...item, tappa: tappaEditVal || 'Altro' });
-    setTappaEditId(null);
-    setTappaEditVal('');
+  function setTappaPosDraft(item, val) {
+    setTappaPosDrafts(d => ({ ...d, [item.id]: val }));
   }
-  function annullaCambiaTappa() {
-    setTappaEditId(null);
-    setTappaEditVal('');
+  // Applica il numero digitato solo su blur/Invio (non ad ogni cifra). Se il numero non
+  // corrisponde a nessuna tappa esistente (vuoto, non numerico, o fuori dall'intervallo
+  // 1..numero di tappe), il tentativo viene semplicemente ignorato e la tappa resta quella
+  // di prima — nessun messaggio d'errore, per non intralciare l'uso veloce al banco.
+  function commitTappaPos(item) {
+    const raw = tappaPosDrafts[item.id];
+    setTappaPosDrafts(d => { const p = { ...d }; delete p[item.id]; return p; });
+    if (raw === undefined) return;
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n < 1 || n > tappaList.length) return; // numero non logico: ignorato
+    const nuovaTappa = tappaList[n - 1];
+    if (nuovaTappa === item.tappa) return;
+    updateItem('listaSpesa', item, { ...item, tappa: nuovaTappa });
   }
   // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
   // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
@@ -1928,6 +1944,11 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       <div key={item.id}>
         <div className={`spesa-lista-item${item.checked?' checked':''}`}
           style={bp ? {background:'var(--salmon-bg)', borderColor:'var(--salmon-border)'} : {}}>
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={tappaPosVal(item)} title="Numero tappa (vedi elenco qui sopra)"
+            onChange={e => setTappaPosDraft(item, e.target.value)}
+            onBlur={() => commitTappaPos(item)}
+            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+            className="tappa-pos-input" />
           <div className="spesa-nome-row">
             <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
             <div style={{flex:1, minWidth:0, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>
@@ -1955,27 +1976,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             className="prezzo-input tot" />
           <button
             className="btn small bp-btn"
-            title="Cambia tappa (negozio)"
-            onClick={() => apriCambiaTappa(item)}
-          >📍</button>
-          <button
-            className="btn small bp-btn"
             title={bp ? 'Pagabile con buoni pasto (tocca per togliere)' : 'Segna come pagabile con buoni pasto'}
             onClick={() => toggleBuonoPasto(item)}
             style={bp ? {background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff'} : {}}
           >🍱</button>
           <button className="spesa-delete" onClick={() => del(item)}>✕</button>
         </div>
-        {tappaEditId === item.id && (
-          <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'6px',flexWrap:'wrap'}}>
-            <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Sposta <strong>{item.nome}</strong> alla tappa:</span>
-            <select value={tappaEditVal} onChange={e => setTappaEditVal(e.target.value)} style={{maxWidth:'160px'}}>
-              {tappaList.map(t => <option key={t}>{t}</option>)}
-            </select>
-            <button className="btn primary small" onClick={() => confermaCambiaTappa(item)}>✓ Sposta</button>
-            <button className="btn small" onClick={annullaCambiaTappa}>✕ Annulla</button>
-          </div>
-        )}
         {quickPriceId === item.id && (
           <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'6px',flexWrap:'wrap'}}>
             <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
@@ -2139,12 +2145,15 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
       {lista.length === 0 && <div className="empty">Lista vuota — aggiungi qualcosa!</div>}
 
-      {tappeOrdinate.map(t => (
+      {tappeOrdinate.map(t => {
+        const posTappa = tappaList.indexOf(t);
+        return (
         <div key={t} style={{marginBottom:'14px'}}>
-          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>📍 {t} <span style={{fontWeight:'400',color:'var(--text3)'}}>({bytappa[t].length})</span></div>
+          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>📍 {posTappa >= 0 ? `${posTappa + 1}. ` : ''}{t} <span style={{fontWeight:'400',color:'var(--text3)'}}>({bytappa[t].length})</span></div>
           {bytappa[t].map(item => renderItem(item))}
         </div>
-      ))}
+        );
+      })}
 
       {daPrendere.length > 0 && (
         <div style={{textAlign:'right',fontSize:'13px',fontWeight:700,color:'var(--text2)',padding:'2px 4px 12px'}}>
@@ -2524,7 +2533,7 @@ function ImpostazioniTab({ data, saveData }) {
     <div className="section active">
       <div className="card">
         <div className="setting-section">
-          <div className="setting-label">Categorie spese</div>
+          <div className="setting-label">Categorie Spese Budget</div>
           <div>{(data.categorie || DEFAULT_CATS).map(c => (
             <span className="cat-chip" key={c}>{c}<button onClick={() => delCat(c)}>✕</button></span>
           ))}</div>
@@ -2535,9 +2544,9 @@ function ImpostazioniTab({ data, saveData }) {
         </div>
 
         <div className="setting-section" style={{marginTop:'20px'}}>
-          <div className="setting-label">Categorie prodotti spesa</div>
+          <div className="setting-label">Categorie per la Lista della Spesa</div>
           <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>
-            Categorie usate nella Lista della spesa (es. Frutta e Verdura, Latticini...) per classificare il tipo di prodotto alimentare. Sono diverse dalle "Categorie spese" qui sopra, che invece servono al Budget familiare.
+            Categorie usate nella Lista della spesa (es. Frutta e Verdura, Latticini...) per classificare il tipo di prodotto alimentare. Sono diverse dalle "Categorie Spese Budget" qui sopra, che invece servono al Budget familiare.
           </div>
           <div>{(data.categorieLista || DEFAULT_SPESA_CATS).map(c => (
             <span className="cat-chip" key={c}>{c}<button onClick={() => delCatSpesa(c)}>✕</button></span>
