@@ -379,7 +379,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v38";
+const APP_VERSION = "v39";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1271,7 +1271,36 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   function dataOrdinamento(s) {
     return (s.pagato && s.dataPagamento) ? s.dataPagamento : s.date;
   }
-  const sorted = [...(data.scadenze || [])].sort((a, b) => dataOrdinamento(a).localeCompare(dataOrdinamento(b)));
+  // ── Ordinamento elenco (v39) ──────────────────────────────────────────────
+  // Le scadenze DA PAGARE/PROGRAMMATE restano ordinate per data di scadenza, come prima.
+  // Le scadenze GIÀ PAGATE vengono invece raggruppate: tutte le rate di uno stesso gruppo
+  // ricorrente (es. Orantour Rata 1, 2, 3...) stanno una di seguito all'altra, in ordine di
+  // rata/data, invece di essere sparse in mezzo alle altre scadenze pagate in date diverse.
+  // I vari gruppi (e le scadenze singole pagate) tra loro restano ordinati in base alla data
+  // di pagamento più recente del gruppo, dal più recente al più vecchio.
+  const nonPagate = (data.scadenze || []).filter(s => !s.pagato)
+    .sort((a, b) => dataOrdinamento(a).localeCompare(dataOrdinamento(b)));
+
+  const pagate = (data.scadenze || []).filter(s => s.pagato);
+  const gruppiPagati = {}; // chiave: gruppoId (o id stesso se scadenza singola non ricorrente)
+  for (const s of pagate) {
+    const chiave = s.gruppoId || s.id;
+    if (!gruppiPagati[chiave]) gruppiPagati[chiave] = [];
+    gruppiPagati[chiave].push(s);
+  }
+  const gruppiPagatiOrdinati = Object.values(gruppiPagati).map(rate => {
+    // Dentro al gruppo: ordina per numero di rata se numerata, altrimenti per data di pagamento
+    rate.sort((a, b) => {
+      if (a.numerata && b.numerata) return (a.rataNum || 0) - (b.rataNum || 0);
+      return dataOrdinamento(a).localeCompare(dataOrdinamento(b));
+    });
+    const dataPiuRecente = rate.reduce((max, s) => dataOrdinamento(s) > max ? dataOrdinamento(s) : max, '');
+    return { rate, dataPiuRecente };
+  });
+  gruppiPagatiOrdinati.sort((a, b) => b.dataPiuRecente.localeCompare(a.dataPiuRecente));
+  const pagateOrdinate = gruppiPagatiOrdinati.flatMap(g => g.rate);
+
+  const sorted = [...nonPagate, ...pagateOrdinate];
   // Nomi già usati in passato per le scadenze, per il completamento automatico del campo Nome
   const nomiScadenzeNote = Array.from(new Set((data.scadenze || []).map(s => s.nome).filter(Boolean)));
 
