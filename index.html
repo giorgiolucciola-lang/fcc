@@ -133,6 +133,9 @@ input[type=text], input[type=number], input[type=date], select, textarea {
   outline: none; width: 100%; transition: background-color 0.2s, border-color 0.2s;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); background: #fff; }
+/* Campi data: ingranditi rispetto agli altri input, per renderli più leggibili e più
+   facili da toccare (richiesta di Giorgio: "calendari più grandi e più visibili") */
+input[type=date] { padding: 12px 12px; font-size: 17px; min-height: 46px; }
 /* Campo compilato: sfondo verdino, come le entrate (solo un vezzo estetico) */
 input[type=text]:not(:placeholder-shown):not(:focus),
 input[type=number]:not(:placeholder-shown):not(:focus) {
@@ -353,6 +356,7 @@ select:required:valid:not(:focus) {
   .scad-actions .btn.small { padding: 7px 10px; }
 
   .form-group { min-width: 90px; }
+  input[type=date] { padding: 14px 12px; font-size: 18px; min-height: 50px; }
 
   .spesa-lista-item .tappa-pos-input { width: 34px; height: 34px; font-size: 16px; padding: 0; }
   .spesa-lista-item .qta-input { width: 50px; font-size: 16px; padding: 9px 4px; }
@@ -379,7 +383,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v40";
+const APP_VERSION = "v41";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase

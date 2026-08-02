@@ -1,6 +1,6 @@
 // ── Service Worker FCC ────────────────────────────────────────────────────────
 // Incrementa CACHE_VERSION ad ogni deploy per forzare l'aggiornamento della PWA
-const CACHE_VERSION = "fcc-v40";
+const CACHE_VERSION = "fcc-v41";
 const CACHE_FILES = [
   "/fcc/",
   "/fcc/index.html",
