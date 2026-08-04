@@ -1,6 +1,6 @@
 // ── Service Worker FCC ────────────────────────────────────────────────────────
 // Incrementa CACHE_VERSION ad ogni deploy per forzare l'aggiornamento della PWA
-const CACHE_VERSION = "fcc-v42";
+const CACHE_VERSION = "fcc-v44";
 const CACHE_FILES = [
   "/fcc/",
   "/fcc/index.html",
@@ -13,6 +13,7 @@ const CACHE_FILES = [
   "/fcc/vendor/firebase-app-compat.js",
   "/fcc/vendor/firebase-auth-compat.js",
   "/fcc/vendor/firebase-firestore-compat.js",
+  "/fcc/vendor/firebase-messaging-compat.js",
 ];
 
 // Installazione: pre-cacha i file principali
@@ -52,3 +53,34 @@ self.addEventListener("fetch", e => {
       .catch(() => caches.match(e.request)) // Fallback cache se offline
   );
 });
+
+// ── NOTIFICHE PUSH (Firebase Cloud Messaging) ────────────────────────────────
+// Questa sezione permette al service worker di mostrare le notifiche anche quando
+// l'app FCC è chiusa: la Cloud Function manda un messaggio "silenzioso" a Firebase,
+// che lo consegna qui, e qui viene trasformato in una notifica vera e propria che
+// compare sullo schermo (con badge/icona dell'app).
+importScripts("/fcc/vendor/firebase-app-compat.js");
+importScripts("/fcc/vendor/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyDWcRC7Zf8NX2OJU197UVvZ23Gy6_SWQtw",
+  authDomain: "family-control-center-4ae38.firebaseapp.com",
+  projectId: "family-control-center-4ae38",
+  storageBucket: "family-control-center-4ae38.firebasestorage.app",
+  messagingSenderId: "722999772560",
+  appId: "1:722999772560:web:f06617ba41dee3f9ebdf15"
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage(payload => {
+  const titolo = (payload.notification && payload.notification.title) || "Family CC";
+  const opzioni = {
+    body: (payload.notification && payload.notification.body) || "",
+    icon: "/fcc/icon.png",
+    badge: "/fcc/icon.png",
+    data: payload.data || {},
+  };
+  self.registration.showNotification(titolo, opzioni);
+});
+

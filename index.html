@@ -16,6 +16,7 @@
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-firestore-compat.js"></script>
+<script src="vendor/firebase-messaging-compat.js"></script>
 <style>
 :root {
   --bg: #f8f5fc;
@@ -383,7 +384,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v42";
+const APP_VERSION = "v44";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -401,6 +402,46 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
+
+// ── NOTIFICHE PUSH (Cloud Messaging) ─────────────────────────────────────────
+// Chiave pubblica generata in Firebase Console → Impostazioni progetto → Cloud
+// Messaging → Certificati web push. Serve per autorizzare il browser/telefono a
+// registrarsi presso Firebase e ricevere notifiche anche ad app chiusa.
+const VAPID_KEY = "BCo3EU98dvNShbsk7h2MJ61ATM6KJDEb9pOZ3QIDqL3VunYmJqVUM0dOdm7ljF487MJ-XD6qpYFOwwAvHUvc52Q";
+// Non tutti i browser supportano le notifiche push (es. Safari fuori da una PWA
+// installata su iPhone): questo blocco evita che l'intera app si blocchi se
+// firebase.messaging() non è disponibile, lasciando "messaging" a null.
+let messaging = null;
+try {
+  if (!firebase.messaging.isSupported || firebase.messaging.isSupported()) {
+    messaging = firebase.messaging();
+  }
+} catch (e) {
+  messaging = null;
+}
+// Chiede il permesso di notifica e, se concesso, registra questo dispositivo presso
+// Firebase Cloud Messaging, restituendo un "token" univoco da salvare in Firestore
+// (la Cloud Function userà quel token per sapere a chi mandare gli avvisi).
+async function attivaNotifichePush() {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    return { ok: false, motivo: 'Questo browser non supporta le notifiche push.' };
+  }
+  if (!messaging) {
+    return { ok: false, motivo: 'Le notifiche push non sono disponibili su questo dispositivo/browser (su iPhone servono iOS 16.4+ e l\'app aggiunta alla schermata Home).' };
+  }
+  try {
+    const permesso = await Notification.requestPermission();
+    if (permesso !== 'granted') {
+      return { ok: false, motivo: 'Permesso di notifica non concesso.' };
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
+    if (!token) return { ok: false, motivo: 'Impossibile ottenere il token di notifica.' };
+    return { ok: true, token };
+  } catch (e) {
+    return { ok: false, motivo: 'Errore durante l\'attivazione: ' + (e && e.message ? e.message : e) };
+  }
+}
 
 // ── PERSISTENZA OFFLINE ──────────────────────────────────────────────────────
 // Salva i dati in locale (IndexedDB) così la lista, le spese e le scadenze
@@ -743,7 +784,7 @@ function App() {
       {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
       {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} askConfirm={askConfirm} />}
       {tab === 'report' && <ReportTab data={data} addItems={addItems} removeItems={removeItems} askConfirm={askConfirm} />}
-      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} />}
+      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} applyUpdate={applyUpdate} />}
 
       {confirmDialog && (
         <div className="confirm-overlay" onClick={() => risolviConfirm(false)}>
@@ -1164,6 +1205,12 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     setPayDate(item.dataPagamento || localDateStr());
     setPayDateId(item.id);
   }
+  // Attiva/disattiva le notifiche prioritarie (avvisi ripetuti ogni tot ore) per questa
+  // scadenza. Tutte le scadenze ricevono comunque l'avviso normale (giorno prima + giorno
+  // stesso all'orario base); questo flag aggiunge SOLO la ripetizione extra.
+  function togglePrioritaria(item) {
+    updateItem('scadenze', item, { ...item, prioritaria: !item.prioritaria });
+  }
   async function del(item) {
     const ok = await askConfirm(`Eliminare la scadenza "${item.nome}"?`);
     if (!ok) return;
@@ -1464,8 +1511,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
             {isMeseCorrente(s.date) && !s.pagato && <span className="scad-dot giallo" title="Scadenza di questo mese"></span>}
             <div className="scad-info">
               <div className="scad-name">{s.nome}</div>
-              {(s.numerata && s.rataNum || tipoLabel(s)) && (
+              {(s.numerata && s.rataNum || tipoLabel(s) || s.prioritaria) && (
                 <div style={{marginTop:'2px',display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                  {s.prioritaria && <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700',background:'var(--accent-light)',padding:'1px 7px',borderRadius:'20px'}}>🔔 Prioritaria</span>}
                   {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null}
                   {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}
                 </div>
@@ -1488,6 +1536,12 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
             <div className="scad-actions">
               <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
               <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
+              <button
+                className="btn small"
+                title={s.prioritaria ? 'Notifiche prioritarie attive (tocca per disattivare)' : 'Attiva notifiche prioritarie (avvisi ripetuti)'}
+                onClick={() => togglePrioritaria(s)}
+                style={s.prioritaria ? {background:'var(--accent-light)',borderColor:'var(--accent)',color:'var(--accent-dark)'} : {}}
+              >🔔</button>
               <button className="btn small" onClick={() => startEdit(s)}>✏️</button>
               <button className="btn small danger" onClick={() => del(s)}>🗑</button>
             </div>
@@ -2497,10 +2551,39 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
 }
 
 // ── IMPOSTAZIONI TAB ───────────────────────────────────────────────────────────
-function ImpostazioniTab({ data, saveData }) {
+// Valori di default per gli orari/intervalli delle notifiche scadenze, usati finché
+// Giorgio non li personalizza dalla tab Impostazioni.
+const DEFAULT_NOTIFICHE = { orario: '10:00', intervalloOre: '3', fasciaInizio: '08:00', fasciaFine: '20:00' };
+
+function ImpostazioniTab({ data, saveData, applyUpdate }) {
   const [newCat, setNewCat] = useState('');
   const [newTappa, setNewTappa] = useState('');
   const [newProdotto, setNewProdotto] = useState('');
+  // Attivazione notifiche push su questo dispositivo: stato del pulsante e messaggio
+  // d'errore da mostrare se qualcosa va storto (es. permesso negato).
+  const [notifStato, setNotifStato] = useState('idle'); // idle | loading | ok | errore
+  const [notifMsg, setNotifMsg] = useState('');
+  async function handleAttivaNotifiche() {
+    setNotifStato('loading');
+    setNotifMsg('');
+    const risultato = await attivaNotifichePush();
+    if (risultato.ok) {
+      await applyUpdate({ notificheTokens: firebase.firestore.FieldValue.arrayUnion(risultato.token) });
+      setNotifStato('ok');
+    } else {
+      setNotifStato('errore');
+      setNotifMsg(risultato.motivo || 'Errore sconosciuto.');
+    }
+  }
+  const permessoAttuale = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+  // Impostazioni notifiche scadenze: orario base per l'avviso giorno-prima/giorno-stesso,
+  // e intervallo/fascia oraria per la ripetizione extra delle scadenze marcate "prioritarie".
+  const [notificheForm, setNotificheForm] = useState({ ...DEFAULT_NOTIFICHE, ...(data.notificheImpostazioni || {}) });
+  function salvaNotificheCampo(campo, valore) {
+    const aggiornate = { ...notificheForm, [campo]: valore };
+    setNotificheForm(aggiornate);
+    saveData({ notificheImpostazioni: aggiornate });
+  }
 
   function addCat() {
     if (!newCat.trim()) return;
@@ -2642,6 +2725,49 @@ function ImpostazioniTab({ data, saveData }) {
             <input type="text" placeholder="Nuova tappa..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
             <button className="btn primary" onClick={addTappa}>Aggiungi</button>
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop:'8px'}}>
+        <div className="setting-label" style={{marginBottom:'8px'}}>🔔 Notifiche scadenze</div>
+        <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'14px',lineHeight:'1.5'}}>
+          Ogni scadenza avvisa il giorno prima e il giorno stesso, all'orario base qui sotto.
+          Le scadenze marcate 🔔 <strong>Prioritaria</strong> (dalla tab Scadenze) ripetono l'avviso
+          ogni tot ore, solo nella fascia oraria che indichi.
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Orario avviso base</label>
+            <input type="time" value={notificheForm.orario} onChange={e => salvaNotificheCampo('orario', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Ripeti ogni (ore, solo prioritarie)</label>
+            <input type="number" min="1" max="12" value={notificheForm.intervalloOre} onChange={e => setNotificheForm(f => ({...f, intervalloOre: e.target.value}))} onBlur={() => salvaNotificheCampo('intervalloOre', notificheForm.intervalloOre)} onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Fascia oraria ripetizioni — da</label>
+            <input type="time" value={notificheForm.fasciaInizio} onChange={e => salvaNotificheCampo('fasciaInizio', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>a</label>
+            <input type="time" value={notificheForm.fasciaFine} onChange={e => salvaNotificheCampo('fasciaFine', e.target.value)} />
+          </div>
+        </div>
+
+        <div style={{marginTop:'16px',paddingTop:'16px',borderTop:'1px solid var(--border)'}}>
+          <div style={{fontSize:'13px',fontWeight:'700',marginBottom:'8px'}}>Notifiche su questo dispositivo</div>
+          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'10px',lineHeight:'1.5'}}>
+            {permessoAttuale === 'granted' && '✅ Le notifiche sono attive su questo dispositivo/browser.'}
+            {permessoAttuale === 'denied' && '🚫 Le notifiche sono bloccate. Per riattivarle vai in Impostazioni iOS → FCC (o Safari) → Notifiche.'}
+            {(permessoAttuale === 'default' || permessoAttuale === 'unsupported') && 'Le notifiche non sono ancora attive su questo dispositivo. Su iPhone funzionano solo se hai aggiunto FCC alla schermata Home (non nel browser Safari) e hai iOS 16.4 o superiore.'}
+          </div>
+          <button className="btn primary small" onClick={handleAttivaNotifiche} disabled={notifStato === 'loading'}>
+            {notifStato === 'loading' ? 'Attivazione...' : '🔔 Attiva notifiche su questo dispositivo'}
+          </button>
+          {notifStato === 'ok' && <div style={{fontSize:'12px',color:'var(--green)',marginTop:'8px'}}>✅ Notifiche attivate su questo dispositivo.</div>}
+          {notifStato === 'errore' && <div style={{fontSize:'12px',color:'var(--red)',marginTop:'8px'}}>{notifMsg}</div>}
         </div>
       </div>
 
