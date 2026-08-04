@@ -383,7 +383,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v41";
+const APP_VERSION = "v42";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1463,7 +1463,13 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
           <div className={`scad-item${s.pagato ? ' pagato' : ''}`} style={rowStyle(s)}>
             {isMeseCorrente(s.date) && !s.pagato && <span className="scad-dot giallo" title="Scadenza di questo mese"></span>}
             <div className="scad-info">
-              <div className="scad-name">{s.nome} {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null} {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}</div>
+              <div className="scad-name">{s.nome}</div>
+              {(s.numerata && s.rataNum || tipoLabel(s)) && (
+                <div style={{marginTop:'2px',display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                  {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null}
+                  {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}
+                </div>
+              )}
               <div className="scad-date">
                 {new Date(...s.date.split('-').map((v,i)=>i===1?v-1:Number(v))).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}
                 {s.pagato && s.dataPagamento && (
