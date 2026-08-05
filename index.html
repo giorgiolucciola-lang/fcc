@@ -41,6 +41,9 @@
   --salmon: #e2685a;
   --salmon-bg: #fff1ef;
   --salmon-border: #f5c2ba;
+  --blue: #2f7dd1;
+  --blue-bg: #eaf2fb;
+  --blue-border: #a9c9ec;
   --radius: 10px;
   --shadow: 0 2px 8px rgba(155,89,182,0.08);
 }
@@ -253,7 +256,7 @@ select:required:valid:not(:focus) {
 .spesa-lista-item input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
 /* Campo numerico a inizio riga per assegnare/spostare la tappa (v37): dimensione simile
    al quadratino del checkbox che segue subito dopo, per stare bene affiancati */
-.spesa-lista-item .tappa-pos-input { width: 26px; height: 18px; padding: 0; font-size: 12px; text-align: center; flex-shrink: 0; }
+.spesa-lista-item .tappa-pos-input { width: 26px; height: 18px; padding: 0; font-size: 12px; text-align: center; flex-shrink: 0; background: var(--blue-bg); border-color: var(--blue-border); color: var(--blue); font-weight: 700; }
 .spesa-lista-item .qta-input { width: 40px; padding: 6px 4px; font-size: 13px; text-align: center; flex-shrink: 0; }
 .spesa-lista-item .unita-select { width: 52px; padding: 6px 2px; font-size: 12px; flex-shrink: 0; }
 .spesa-lista-item .prezzo-input { width: 64px; padding: 6px 6px; font-size: 13px; flex-shrink: 0; }
@@ -384,7 +387,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v44";
+const APP_VERSION = "v45";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
