@@ -387,7 +387,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v45";
+const APP_VERSION = "v46";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1396,6 +1396,18 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     return {};
   }
 
+  // Conta quante altre rate dello stesso gruppo ricorrente sono ancora da pagare.
+  // Serve per avvisare quando una rata pagata potrebbe far pensare (a colpo d'occhio,
+  // scorrendo l'elenco) che tutto il gruppo sia a posto, mentre altre rate della stessa
+  // serie sono ancora aperte più giù/più su nell'elenco (elenco che resta diviso in
+  // pagate/scadute-da pagare/programmate, come richiesto — nessuna riorganizzazione).
+  function rateGruppoAncoraDaPagare(s) {
+    if (!s.pagato || !s.ricorrente) return 0;
+    const chiave = s.gruppoId || s.id;
+    const tutte = data.scadenze || [];
+    return tutte.filter(item => (item.id === chiave || item.gruppoId === chiave) && !item.pagato).length;
+  }
+
   // Stato unificato: testo + colore del pulsante, in base a pagato/scadenza
   function statoBtn(s) {
     if (s.pagato) return { label: '✓ Pagata', bg: 'var(--green)', border: 'var(--green)', color: '#fff' };
@@ -1508,6 +1520,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
 
       {sorted.map(s => {
         const st = statoBtn(s);
+        const rateAperteGruppo = rateGruppoAncoraDaPagare(s);
         return (
         <div key={s.id}>
           <div className={`scad-item${s.pagato ? ' pagato' : ''}`} style={rowStyle(s)}>
@@ -1519,6 +1532,11 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                   {s.prioritaria && <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700',background:'var(--accent-light)',padding:'1px 7px',borderRadius:'20px'}}>🔔 Prioritaria</span>}
                   {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null}
                   {tipoLabel(s) && <span style={{fontSize:'11px',color:'var(--text3)'}}>{tipoLabel(s)}</span>}
+                </div>
+              )}
+              {rateAperteGruppo > 0 && (
+                <div style={{marginTop:'3px',fontSize:'11px',fontWeight:'700',color:'var(--orange)'}}>
+                  ⚠️ {rateAperteGruppo} rat{rateAperteGruppo === 1 ? 'a' : 'e'} di questo gruppo ancora da pagare
                 </div>
               )}
               <div className="scad-date">
@@ -2506,7 +2524,7 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
                 <input type="text" placeholder="Es. Accredito mensile lavoro" value={formBP.desc} onChange={e => setFormBP(f => ({...f, desc: e.target.value}))} />
               </div>
             </div>
-            <div className="form-row">
+            <div className="form-row" style={{alignItems:'flex-end'}}>
               <div className="form-group">
                 <label>Quantità (unità)</label>
                 <input type="number" step="1" min="0" placeholder="Es. 20" value={formBP.qty} onChange={e => setFormBPQty(e.target.value)} />
@@ -2515,6 +2533,13 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
                 <label>Valore €</label>
                 <input type="number" step="0.01" min="0" placeholder="0.00" value={formBP.amount} onChange={e => setFormBPAmount(e.target.value)} />
               </div>
+              {formBP.qty !== '' && (
+                <div style={{display:'flex',alignItems:'center',paddingBottom:'2px'}}>
+                  <span style={{fontSize:'15px',fontWeight:'800',color:'var(--salmon)',background:'#fff',border:'1.5px solid var(--salmon)',borderRadius:'20px',padding:'6px 14px',whiteSpace:'nowrap'}}>
+                    🍱 {formBP.qty} buon{Number(formBP.qty) === 1 ? 'o' : 'i'}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="form-row">
               <div className="form-group">
@@ -2532,9 +2557,9 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
           return (
             <div className="spesa-item" key={b.id} style={{borderColor:'var(--salmon-border)'}}>
               <div style={{flex:1}}>
-                <div className="spesa-desc" style={{color:'var(--salmon)'}}>
-                  {isSpeso ? '➖' : '➕'} {b.desc}
-                  {b.qty ? <span style={{fontSize:'11px',color:'var(--text3)',fontWeight:'400'}}> · {b.qty} buon{b.qty === 1 ? 'o' : 'i'}</span> : null}
+                <div className="spesa-desc" style={{color:'var(--salmon)',display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+                  <span>{isSpeso ? '➖' : '➕'} {b.desc}</span>
+                  {b.qty ? <span style={{fontSize:'12px',fontWeight:'800',color:'var(--salmon)',background:'#fff',border:'1.5px solid var(--salmon)',borderRadius:'20px',padding:'2px 10px',whiteSpace:'nowrap'}}>🍱 {b.qty} buon{b.qty === 1 ? 'o' : 'i'}</span> : null}
                 </div>
                 <div className="spesa-cat">{formatDataIT(b.date)}</div>
               </div>
