@@ -37,6 +37,9 @@
   --red-bg: #fdf0ee;
   --red-border: #e8b0a8;
   --orange: #ff9f1c;
+  --giallo: #c99a06;
+  --giallo-bg: #fdf6e0;
+  --giallo-border: #e8d38a;
   --orange-bg: #fef5ec;
   --salmon: #e2685a;
   --salmon-bg: #fff1ef;
@@ -387,7 +390,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v46";
+const APP_VERSION = "v47";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -517,12 +520,20 @@ function dayLabel(dateStr) {
   if (diff === 1) return 'Ieri';
   return date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 }
-function scadenzaColor(dateStr) {
+// Il parametro "tolleranza" (giorni) permette a scadenze che ammettono un margine di pagamento
+// oltre la data naturale (es. Rottamazione Quater: 5 giorni solari extra senza decadenza) di restare
+// in stato "giallo" (scaduta ma ancora pagabile senza rischio) invece di passare subito a "rosso",
+// finché non sono trascorsi anche quei giorni di tolleranza.
+function scadenzaColor(dateStr, tolleranza) {
+  const tol = Number(tolleranza || 0);
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   const today = new Date(); today.setHours(0,0,0,0);
   const diff = Math.round((date - today) / 86400000);
-  if (diff < 0) return 'rosso';
+  if (diff < 0) {
+    if (tol > 0 && -diff <= tol) return 'giallo';
+    return 'rosso';
+  }
   if (diff <= 5) return 'arancio';
   return 'verde';
 }
@@ -599,6 +610,7 @@ function generaOccorrenze(scadenza, count = 12) {
       pagato: false,
       numerata: !!scadenza.numerata,
       rataNum: scadenza.numerata ? rataBase + i : null,
+      tolleranzaGiorni: Number(scadenza.tolleranzaGiorni || 0),
     });
   }
   return occorrenze;
@@ -1136,11 +1148,11 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
 // ── SCADENZE TAB ───────────────────────────────────────────────────────────────
 function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askConfirm }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false });
+  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false, tolleranza: '' });
   const [editId, setEditId] = useState(null);
   // tipo/unita/intervallo/fineMese servono per CORREGGERE la frequenza di un gruppo
   // ricorrente creato per errore (es. scelto "ogni mese" invece di "ogni 3 mesi")
-  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '', tipo: 'ricorrente', unita: 'mesi', intervallo: '1', fineMese: false });
+  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '', tipo: 'ricorrente', unita: 'mesi', intervallo: '1', fineMese: false, rataNum: '', tolleranza: '' });
   const [editScope, setEditScope] = useState('singola'); // 'singola' | 'gruppo'
   // Riquadro "conferma pagamento": chiede la data effettiva di pagamento (default oggi)
   // prima di segnare una scadenza come pagata, così lo storico resta corretto anche
@@ -1173,13 +1185,14 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       gruppoId: null,
       numerata: ricorrente && !!form.numera,
       rataNum: (ricorrente && form.numera) ? 1 : null,
+      tolleranzaGiorni: Number(form.tolleranza || 0),
     };
     let nuove = [base];
     if (ricorrente) {
       nuove = nuove.concat(generaOccorrenze(base, 12));
     }
     addItems('scadenze', nuove);
-    setForm({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false });
+    setForm({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false, tolleranza: '' });
     setShow(false);
   }
   // Apre il riquadro "conferma pagamento" (con data odierna precompilata) quando si segna
@@ -1246,6 +1259,8 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       unita: norm.unita,
       intervallo: String(norm.valore),
       fineMese: norm.fineMese,
+      rataNum: (s.rataNum != null) ? String(s.rataNum) : '',
+      tolleranza: (s.tolleranzaGiorni != null) ? String(s.tolleranzaGiorni) : '',
     });
     setEditScope('singola');
   }
@@ -1282,6 +1297,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
           gruppoId: null,
           numerata: false,
           rataNum: null,
+          tolleranzaGiorni: Number(editForm.tolleranza || 0),
         };
         await addItems('scadenze', [nuovaSingola]);
       } else {
@@ -1306,13 +1322,25 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
           gruppoId: null,
           numerata: !!s.numerata,
           rataNum: s.numerata ? (s.rataNum || 1) : null,
+          tolleranzaGiorni: Number(editForm.tolleranza || 0),
         };
         const nuoveOccorrenze = generaOccorrenze(nuovaBase, 12);
         await addItems('scadenze', [nuovaBase, ...nuoveOccorrenze]);
       }
     } else {
-      // Solo questa singola rata
-      const newItem = { ...s, nome: editForm.nome, amount: Number(editForm.amount), date: editForm.date };
+      // Solo questa singola rata. Il numero di rata può essere corretto a mano qui
+      // (utile se in fase di creazione/generazione era sbagliato): un campo vuoto
+      // lascia la numerazione come prima, un numero valido la sovrascrive.
+      const rataNumCorretto = editForm.rataNum !== '' ? Number(editForm.rataNum) : s.rataNum;
+      const newItem = {
+        ...s,
+        nome: editForm.nome,
+        amount: Number(editForm.amount),
+        date: editForm.date,
+        rataNum: rataNumCorretto,
+        numerata: editForm.rataNum !== '' ? true : s.numerata,
+        tolleranzaGiorni: Number(editForm.tolleranza || 0),
+      };
       await updateItem('scadenze', s, newItem);
     }
     setEditId(null);
@@ -1336,9 +1364,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   // I vari gruppi (e le scadenze singole pagate) tra loro restano ordinati in base alla data
   // di pagamento più recente del gruppo, dal più recente al più vecchio.
   const nonPagate = (data.scadenze || []).filter(s => !s.pagato);
-  const nonPagateUrgenti = nonPagate.filter(s => scadenzaColor(s.date) !== 'verde')
+  const nonPagateUrgenti = nonPagate.filter(s => scadenzaColor(s.date, s.tolleranzaGiorni) !== 'verde')
     .sort((a, b) => dataOrdinamento(a).localeCompare(dataOrdinamento(b)));
-  const nonPagateProgrammate = nonPagate.filter(s => scadenzaColor(s.date) === 'verde')
+  const nonPagateProgrammate = nonPagate.filter(s => scadenzaColor(s.date, s.tolleranzaGiorni) === 'verde')
     .sort((a, b) => dataOrdinamento(a).localeCompare(dataOrdinamento(b)));
 
   const pagate = (data.scadenze || []).filter(s => s.pagato);
@@ -1363,6 +1391,26 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   const sorted = [...pagateOrdinate, ...nonPagateUrgenti, ...nonPagateProgrammate];
   // Nomi già usati in passato per le scadenze, per il completamento automatico del campo Nome
   const nomiScadenzeNote = Array.from(new Set((data.scadenze || []).map(s => s.nome).filter(Boolean)));
+
+  // ── Raggruppamento visivo per mese (v47) ──────────────────────────────────
+  // Tutte le scadenze di uno stesso mese solare (pagate, scadute, da pagare o programmate,
+  // di qualunque gruppo ricorrente o singole) vengono racchiuse in un unico riquadro con
+  // cornice, per capire a colpo d'occhio se in quel mese resta ancora qualcosa in sospeso,
+  // senza dover scorrere tutto l'elenco cercandole. I mesi sono ordinati cronologicamente;
+  // dentro ogni mese le rate già pagate compaiono per prime, poi le altre in ordine di data.
+  const gruppiPerMese = {};
+  for (const s of (data.scadenze || [])) {
+    const chiaveMese = s.date.slice(0, 7); // "yyyy-mm"
+    if (!gruppiPerMese[chiaveMese]) gruppiPerMese[chiaveMese] = [];
+    gruppiPerMese[chiaveMese].push(s);
+  }
+  const mesiOrdinati = Object.keys(gruppiPerMese).sort();
+  for (const chiave of mesiOrdinati) {
+    gruppiPerMese[chiave].sort((a, b) => {
+      if (a.pagato !== b.pagato) return a.pagato ? -1 : 1;
+      return a.date.localeCompare(b.date);
+    });
+  }
 
   // Totale scadenze del mese corrente (quello di oggi), da mostrare in evidenza in cima alla scheda.
   // Riusa lo stesso stile a "card" del riepilogo del Budget, così su iPhone resta leggibile
@@ -1390,9 +1438,10 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   // Colore di sfondo della riga, per distinguere a colpo d'occhio pagate/scadute/da pagare/programmate
   function rowStyle(s) {
     if (s.pagato) return { background: 'var(--green-bg)', borderColor: 'var(--green-border)' };
-    const col = scadenzaColor(s.date);
+    const col = scadenzaColor(s.date, s.tolleranzaGiorni);
     if (col === 'rosso') return { background: 'var(--red-bg)', borderColor: 'var(--red-border)' };
     if (col === 'arancio') return { background: 'var(--orange-bg)', borderColor: 'var(--orange)' };
+    if (col === 'giallo') return { background: 'var(--giallo-bg)', borderColor: 'var(--giallo-border)' };
     return {};
   }
 
@@ -1411,8 +1460,12 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   // Stato unificato: testo + colore del pulsante, in base a pagato/scadenza
   function statoBtn(s) {
     if (s.pagato) return { label: '✓ Pagata', bg: 'var(--green)', border: 'var(--green)', color: '#fff' };
-    const col = scadenzaColor(s.date); // 'rosso' | 'arancio' | 'verde'
+    const col = scadenzaColor(s.date, s.tolleranzaGiorni); // 'rosso' | 'giallo' | 'arancio' | 'verde'
     if (col === 'rosso') return { label: '⚠ Scaduta', bg: 'var(--red)', border: 'var(--red)', color: '#fff' };
+    if (col === 'giallo') {
+      const limite = addDaysToDateStr(s.date, Number(s.tolleranzaGiorni || 0));
+      return { label: `⏳ Pagabile fino al ${formatDataIT(limite)}`, bg: 'var(--giallo)', border: 'var(--giallo)', color: '#fff' };
+    }
     if (col === 'arancio') return { label: 'Da pagare', bg: 'var(--orange)', border: 'var(--orange)', color: '#fff' };
     return { label: 'Programmata', bg: 'var(--surface2)', border: 'var(--border2)', color: 'var(--text2)' };
   }
@@ -1446,6 +1499,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
 
       <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',lineHeight:'1.5'}}>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--red)'}}></span> scaduta</span>
+        <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--giallo)'}}></span> scaduta ma pagabile senza rischio (tolleranza)</span>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--orange)'}}></span> da pagare (entro 5 giorni)</span>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--surface2)',border:'1px solid var(--border2)'}}></span> programmata</span>
         <span style={{display:'inline-flex',alignItems:'center',gap:'4px',marginRight:'12px'}}><span style={{display:'inline-block',width:'10px',height:'10px',borderRadius:'3px',background:'var(--green)'}}></span> pagata</span>
@@ -1478,6 +1532,15 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                 <option value="ricorrente">Ricorrente (si ripete nel tempo)</option>
               </select>
             </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group" style={{maxWidth:'220px'}}>
+              <label>Giorni di tolleranza <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
+              <input type="number" min="0" placeholder="0" value={form.tolleranza} onChange={e => setForm(f => ({...f, tolleranza: e.target.value}))} />
+            </div>
+          </div>
+          <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px',marginTop:'-6px'}}>
+            Se dopo la scadenza è ancora possibile pagare senza penalità per un certo numero di giorni (es. Rottamazione Quater: 5 giorni), scrivilo qui: la scadenza resterà in stato 🟡 "pagabile senza rischio" invece che ⚠️ scaduta, finché non passano anche questi giorni extra.
           </div>
           {form.tipo === 'ricorrente' && (
             <>
@@ -1516,13 +1579,20 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
         </div>
       )}
 
-      {sorted.length === 0 && <div className="empty">Nessuna scadenza</div>}
+      {mesiOrdinati.length === 0 && <div className="empty">Nessuna scadenza</div>}
 
-      {sorted.map(s => {
-        const st = statoBtn(s);
-        const rateAperteGruppo = rateGruppoAncoraDaPagare(s);
+      {mesiOrdinati.map(chiaveMese => {
+        const [meseAnno, meseNum] = chiaveMese.split('-').map(Number);
         return (
-        <div key={s.id}>
+        <div key={chiaveMese} style={{border:'2px solid var(--accent)',borderRadius:'14px',padding:'10px',marginBottom:'16px'}}>
+          <div style={{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--accent)',padding:'2px 6px 8px'}}>
+            {monthLabel(meseAnno, meseNum)}
+          </div>
+          {gruppiPerMese[chiaveMese].map(s => {
+            const st = statoBtn(s);
+            const rateAperteGruppo = rateGruppoAncoraDaPagare(s);
+            return (
+            <div key={s.id}>
           <div className={`scad-item${s.pagato ? ' pagato' : ''}`} style={rowStyle(s)}>
             {isMeseCorrente(s.date) && !s.pagato && <span className="scad-dot giallo" title="Scadenza di questo mese"></span>}
             <div className="scad-info">
@@ -1598,6 +1668,20 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                   <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
                 </div>
               </div>
+              {editScope === 'singola' && (
+                <div className="form-row">
+                  <div className="form-group" style={{maxWidth:'150px'}}>
+                    <label>Numero rata <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
+                    <input type="number" min="1" placeholder="Es. 13" value={editForm.rataNum} onChange={e => setEditForm(f => ({...f, rataNum: e.target.value}))} />
+                  </div>
+                </div>
+              )}
+              <div className="form-row">
+                <div className="form-group" style={{maxWidth:'220px'}}>
+                  <label>Giorni di tolleranza <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
+                  <input type="number" min="0" placeholder="0" value={editForm.tolleranza} onChange={e => setEditForm(f => ({...f, tolleranza: e.target.value}))} />
+                </div>
+              </div>
               {s.ricorrente && (
                 <div className="form-row">
                   <div className="form-group">
@@ -1657,6 +1741,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               </div>
             </div>
           )}
+            </div>
+            );
+          })}
         </div>
         );
       })}
