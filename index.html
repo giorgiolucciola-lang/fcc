@@ -344,6 +344,7 @@ select:required:valid:not(:focus) {
 @media (max-width: 480px) {
   .nav-top { padding: 9px 12px; }
   .nav-title { font-size: 14px; }
+  .nav-credit { display: none; }
   .nav-user { gap: 6px; font-size: 12px; }
   .print-btn, .sync-btn { padding: 6px 10px; font-size: 11px; }
   .nav-tabs { padding: 0 4px 0; }
@@ -390,7 +391,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v47";
+const APP_VERSION = "v48";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -775,7 +776,7 @@ function App() {
     <div>
       <nav>
         <div className="nav-top">
-          <div className="nav-title">💜 Family CC <span className="nav-version">{APP_VERSION}</span></div>
+          <div className="nav-title">💜 Family Control Centre <span className="nav-credit" style={{fontSize:'11px',fontWeight:400,opacity:0.75}}>by Claude</span> <span className="nav-version">{APP_VERSION}</span></div>
           <div className="nav-user">
             <span style={{display:'none',fontSize:'12px'}}>{user.displayName?.split(' ')[0]}</span>
             <button className="print-btn" onClick={() => window.print()} title="Stampa la scheda corrente">
