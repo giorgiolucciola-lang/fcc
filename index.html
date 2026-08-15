@@ -391,7 +391,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v48";
+const APP_VERSION = "v49";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -484,30 +484,6 @@ function parseNumIT(v) {
   const s = String(v).trim().replace(',', '.');
   if (s === '') return NaN;
   return parseFloat(s);
-}
-// Calcola il prezzo totale (qtà × prezzo unitario) tenendo conto di COSA significa il prezzo
-// unitario in base all'unità di misura scelta:
-// - "gr" (grammi): il prezzo digitato si intende ALL'ETTO (ogni 100 grammi), come indicato
-//   di norma ai banchi salumeria/gastronomia/macelleria (es. "3,40 € all'etto"). Prima di
-//   questa correzione il prezzo veniva invece moltiplicato per i grammi as-is, gonfiando il
-//   totale di 100 volte (250 g × 3,40 €/etto dava 850 € invece di 8,50 €).
-// - "kg", "l", "pz": il prezzo è per l'intera unità (al kg, al litro, al pezzo), quindi
-//   quantità e prezzo si moltiplicano direttamente senza conversioni.
-function calcolaTotaleSpesa(qta, unita, prezzoUnitario) {
-  const q = parseNumIT(qta);
-  const p = parseNumIT(prezzoUnitario);
-  if (isNaN(q) || isNaN(p)) return null;
-  const base = (unita === 'g') ? (q / 100) : q;
-  return String(Math.round(base * p * 100) / 100);
-}
-// Etichetta da mostrare accanto al campo prezzo unitario, per rendere esplicito a cosa si
-// riferisce il numero digitato (evita l'ambiguità che ha causato il bug del prosciutto: prezzo
-// scritto "3,40" pensando all'etto, ma calcolato dall'app come fosse al grammo).
-function etichettaPrezzoUnitario(unita) {
-  if (unita === 'g') return "€ all'etto";
-  if (unita === 'kg') return '€ al kg';
-  if (unita === 'l') return '€ al litro';
-  return '€ al pezzo';
 }
 function monthLabel(y, m) {
   return new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
@@ -1153,7 +1129,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   const [editId, setEditId] = useState(null);
   // tipo/unita/intervallo/fineMese servono per CORREGGERE la frequenza di un gruppo
   // ricorrente creato per errore (es. scelto "ogni mese" invece di "ogni 3 mesi")
-  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '', tipo: 'ricorrente', unita: 'mesi', intervallo: '1', fineMese: false, rataNum: '', tolleranza: '' });
+  const [editForm, setEditForm] = useState({ nome: '', amount: '', date: '', dataPagamento: '', tipo: 'ricorrente', unita: 'mesi', intervallo: '1', fineMese: false, rataNum: '', tolleranza: '' });
   const [editScope, setEditScope] = useState('singola'); // 'singola' | 'gruppo'
   // Riquadro "conferma pagamento": chiede la data effettiva di pagamento (default oggi)
   // prima di segnare una scadenza come pagata, così lo storico resta corretto anche
@@ -1198,16 +1174,19 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   }
   // Apre il riquadro "conferma pagamento" (con data odierna precompilata) quando si segna
   // come pagata; riapre invece subito senza chiedere nulla (e svuota la data di pagamento).
+  // Riaprendo, la rata viene anche marcata "riaperta" (v49): resta nel mese di competenza
+  // ma si distingue visivamente (bordo tratteggiato arancio + etichetta), così non si perde
+  // traccia del fatto che era stata pagata e poi riaperta.
   function togglePagato(item) {
     if (item.pagato) {
-      updateItem('scadenze', item, { ...item, pagato: false, dataPagamento: null });
+      updateItem('scadenze', item, { ...item, pagato: false, dataPagamento: null, riaperta: true });
       return;
     }
     setPayDate(localDateStr());
     setPayDateId(item.id);
   }
   function confermaPagamento(item) {
-    updateItem('scadenze', item, { ...item, pagato: true, dataPagamento: payDate || localDateStr() });
+    updateItem('scadenze', item, { ...item, pagato: true, dataPagamento: payDate || localDateStr(), riaperta: false });
     setPayDateId(null);
     setPayDate('');
   }
@@ -1256,6 +1235,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       nome: s.nome,
       amount: s.amount || '',
       date: s.date,
+      dataPagamento: s.dataPagamento || '',
       tipo: s.ricorrente ? 'ricorrente' : 'singola',
       unita: norm.unita,
       intervallo: String(norm.valore),
@@ -1341,6 +1321,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
         rataNum: rataNumCorretto,
         numerata: editForm.rataNum !== '' ? true : s.numerata,
         tolleranzaGiorni: Number(editForm.tolleranza || 0),
+        // Data di pagamento correggibile qui solo se la rata è già pagata (altrimenti
+        // non ha senso salvarne una: una rata "da pagare" non ha una data di pagamento)
+        dataPagamento: s.pagato ? (editForm.dataPagamento || s.dataPagamento) : s.dataPagamento,
       };
       await updateItem('scadenze', s, newItem);
     }
@@ -1439,6 +1422,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   // Colore di sfondo della riga, per distinguere a colpo d'occhio pagate/scadute/da pagare/programmate
   function rowStyle(s) {
     if (s.pagato) return { background: 'var(--green-bg)', borderColor: 'var(--green-border)' };
+    // Rata riaperta (v49): bordo tratteggiato arancio invece del solito colore di stato,
+    // per farla risaltare subito nella cornice del mese finché non viene risistemata.
+    if (s.riaperta) return { background: '#fff3e8', border: '2px dashed var(--orange)', position: 'relative' };
     const col = scadenzaColor(s.date, s.tolleranzaGiorni);
     if (col === 'rosso') return { background: 'var(--red-bg)', borderColor: 'var(--red-border)' };
     if (col === 'arancio') return { background: 'var(--orange-bg)', borderColor: 'var(--orange)' };
@@ -1595,6 +1581,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
             return (
             <div key={s.id}>
           <div className={`scad-item${s.pagato ? ' pagato' : ''}`} style={rowStyle(s)}>
+            {!s.pagato && s.riaperta && (
+              <span style={{position:'absolute',top:'-9px',left:'14px',background:'var(--orange)',color:'#fff',fontSize:'10px',fontWeight:'700',padding:'1px 8px',borderRadius:'10px',letterSpacing:'0.03em'}}>RIAPERTA</span>
+            )}
             {isMeseCorrente(s.date) && !s.pagato && <span className="scad-dot giallo" title="Scadenza di questo mese"></span>}
             <div className="scad-info">
               <div className="scad-name">{s.nome}</div>
@@ -1665,9 +1654,15 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Data{editScope === 'gruppo' ? ' (di questa rata, usata come base per rigenerare le successive)' : ''}</label>
+                  <label>Data scadenza{editScope === 'gruppo' ? ' (di questa rata, usata come base per rigenerare le successive)' : ''}</label>
                   <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
                 </div>
+                {s.pagato && editScope === 'singola' && (
+                  <div className="form-group">
+                    <label>Data pagamento</label>
+                    <input type="date" value={editForm.dataPagamento} onChange={e => setEditForm(f => ({...f, dataPagamento: e.target.value}))} />
+                  </div>
+                )}
               </div>
               {editScope === 'singola' && (
                 <div className="form-row">
@@ -1862,7 +1857,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, askConfirm }) {
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', unita: 'pz', prezzoUnitario: '', prezzoTotale: '' });
+  const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', unita: 'pz', prezzoTotale: '' });
   const [newCatInline, setNewCatInline] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
   const [newSottocatInline, setNewSottocatInline] = useState('');
@@ -1933,7 +1928,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const nomeTrim = form.nome.trim();
     const catTrim = form.cat.trim();
     const sottocatTrim = form.sottocat.trim();
-    const item = { id: Date.now(), nome: nomeTrim, cat: catTrim || 'Altro', sottocat: sottocatTrim, tappa: form.tappa || 'Altro', qta: form.qta || '1', unita: form.unita || 'pz', prezzoUnitario: form.prezzoUnitario || '', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
+    const item = { id: Date.now(), nome: nomeTrim, cat: catTrim || 'Altro', sottocat: sottocatTrim, tappa: form.tappa || 'Altro', qta: form.qta || '1', unita: form.unita || 'pz', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
     addItems('listaSpesa', [item]);
     // Salva il nome nello storico prodotti (persiste anche dopo "Registra spesa", a differenza
     // della lista stessa), così il completamento automatico funziona anche per articoli già acquistati
@@ -1955,25 +1950,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (catTrim && sottocatTrim && !sottocatList.includes(sottocatTrim)) {
       applyUpdate({ [`sottocategorieLista.${catTrim}`]: firebase.firestore.FieldValue.arrayUnion(sottocatTrim) });
     }
-    setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', unita: form.unita || 'pz', prezzoUnitario: '', prezzoTotale: '' });
-  }
-  // Quando cambia il prezzo unitario nel form di aggiunta, ricalcola in automatico il totale (Qtà × prezzo unit.)
-  // Usa parseNumIT (non parseFloat) per capire correttamente anche i valori scritti con la virgola (es. "0,500")
-  function handleFormUnitChange(val) {
-    const totaleCalc = calcolaTotaleSpesa(form.qta, form.unita, val);
-    setForm(f => ({ ...f, prezzoUnitario: val, prezzoTotale: totaleCalc !== null ? totaleCalc : f.prezzoTotale }));
-  }
-  // Quando cambia la QUANTITÀ nel form di aggiunta, ricalcola anch'essa il totale in automatico
-  // (prima il totale si aggiornava solo cambiando il prezzo unitario, non la quantità)
-  function handleFormQtaChange(val) {
-    const totaleCalc = calcolaTotaleSpesa(val, form.unita, form.prezzoUnitario);
-    setForm(f => ({ ...f, qta: val, prezzoTotale: totaleCalc !== null ? totaleCalc : f.prezzoTotale }));
-  }
-  // Quando cambia l'UNITÀ (es. da "kg" a "gr"), cambia anche il significato del prezzo
-  // unitario (al kg vs all'etto): ricalcola subito il totale con la nuova unità.
-  function handleFormUnitaChange(val) {
-    const totaleCalc = calcolaTotaleSpesa(form.qta, val, form.prezzoUnitario);
-    setForm(f => ({ ...f, unita: val, prezzoTotale: totaleCalc !== null ? totaleCalc : f.prezzoTotale }));
+    setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', unita: form.unita || 'pz', prezzoTotale: '' });
   }
   function toggle(item) {
     if (item.checked) {
@@ -1990,11 +1967,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       setQuickPriceId(item.id);
     }
   }
-  // Conferma del riquadro "prezzo rapido": salva il prezzo (se inserito) e spunta l'articolo, in un solo aggiornamento
+  // Conferma del riquadro "prezzo rapido": salva il totale (se inserito, scritto sempre a mano —
+  // nessun calcolo automatico) e spunta l'articolo, in un solo aggiornamento
   function confermaQuickPrice(item) {
-    const totaleCalc = calcolaTotaleSpesa(item.qta, item.unita, quickPrice);
-    const totaleFinale = totaleCalc !== null ? totaleCalc : (quickPrice || item.prezzoTotale || '');
-    updateItem('listaSpesa', item, { ...item, prezzoUnitario: quickPrice || item.prezzoUnitario, prezzoTotale: totaleFinale, checked: true });
+    updateItem('listaSpesa', item, { ...item, prezzoTotale: quickPrice || item.prezzoTotale || '', checked: true });
     setQuickPriceId(null);
     setQuickPrice('');
   }
@@ -2034,25 +2010,14 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (field === 'unita') return item[field] || 'pz';
     return item[field] || '';
   }
+  // L'unità è solo un'etichetta descrittiva (promemoria di cosa si è preso): cambiarla non
+  // ricalcola nulla, si salva subito senza bisogno di conferma separata.
   function setDraftUnita(item, val) {
-    // Cambiare l'unità cambia anche il significato del prezzo unitario (es. da "al kg" a
-    // "all'etto"): ricalcola subito il totale con la nuova unità, usando i valori di quantità
-    // e prezzo unitario attuali (bozza in corso se presente, altrimenti quelli già salvati).
-    const qtaAttuale = draftVal(item, 'qta');
-    const prezzoAttuale = draftVal(item, 'prezzoUnitario');
-    const totaleCalc = calcolaTotaleSpesa(qtaAttuale, val, prezzoAttuale);
-    const nuovoTotale = totaleCalc !== null ? totaleCalc : draftVal(item, 'prezzoTotale');
     setDrafts(d => { const p = { ...d }; delete p[item.id]; return p; });
-    // L'unità non richiede conferma separata: si salva subito, non c'è calcolo da aspettare
-    updateItem('listaSpesa', item, { ...item, unita: val, qta: qtaAttuale, prezzoUnitario: prezzoAttuale, prezzoTotale: nuovoTotale });
+    updateItem('listaSpesa', item, { ...item, unita: val });
   }
   function setDraftQta(item, val) {
-    const totaleCalc = calcolaTotaleSpesa(val, draftVal(item, 'unita'), draftVal(item, 'prezzoUnitario'));
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], qta: val, prezzoTotale: totaleCalc !== null ? totaleCalc : draftVal(item, 'prezzoTotale') } }));
-  }
-  function setDraftUnit(item, val) {
-    const totaleCalc = calcolaTotaleSpesa(draftVal(item, 'qta'), draftVal(item, 'unita'), val);
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoUnitario: val, prezzoTotale: totaleCalc !== null ? totaleCalc : draftVal(item, 'prezzoTotale') } }));
+    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], qta: val } }));
   }
   function setDraftTotale(item, val) {
     setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoTotale: val } }));
@@ -2158,26 +2123,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
             className="tappa-pos-input" />
           <div className="spesa-nome-row">
-            <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} />
-            <div style={{flex:1, minWidth:0, cursor: item.checked ? 'default' : 'pointer'}} onClick={() => !item.checked && toggle(item)}>
+            <div style={{flex:1, minWidth:0}}>
               <div style={{overflowWrap:'break-word', wordBreak:'break-word'}}>{item.nome}</div>
               <div className="spesa-cat">{item.cat}{item.sottocat ? ` › ${item.sottocat}` : ''}</div>
             </div>
           </div>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={draftVal(item, 'qta')} title="Quantità"
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={draftVal(item, 'qta')} title="Quantità (promemoria, es. 500 = grammi)"
             onChange={e => setDraftQta(item, e.target.value)}
             onBlur={() => commitDraft(item)}
             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
             className="qta-input" />
-          <select value={draftVal(item, 'unita')} title="Unità di misura" onChange={e => setDraftUnita(item, e.target.value)} className="unita-select">
+          <select value={draftVal(item, 'unita')} title="Unità (solo promemoria, nessun calcolo)" onChange={e => setDraftUnita(item, e.target.value)} className="unita-select">
             {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
           </select>
-          <input type="text" inputMode="decimal" placeholder={etichettaPrezzoUnitario(draftVal(item, 'unita'))} title={etichettaPrezzoUnitario(draftVal(item, 'unita'))} value={draftVal(item, 'prezzoUnitario')}
-            onChange={e => setDraftUnit(item, e.target.value)}
-            onBlur={() => commitDraft(item)}
-            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-            className="prezzo-input" />
-          <input type="text" inputMode="decimal" placeholder="€ tot." value={draftVal(item, 'prezzoTotale')}
+          <input type="text" inputMode="decimal" placeholder="€ totale" title="Prezzo totale pagato (scritto a mano)" value={draftVal(item, 'prezzoTotale')}
             onChange={e => setDraftTotale(item, e.target.value)}
             onBlur={() => commitDraft(item)}
             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
@@ -2188,6 +2147,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             onClick={() => toggleBuonoPasto(item)}
             style={bp ? {background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff'} : {}}
           >🍱</button>
+          <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} title="Preso" />
           <button className="spesa-delete" onClick={() => del(item)}>✕</button>
         </div>
         {quickPriceId === item.id && (
@@ -2195,7 +2155,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
             <input
               ref={quickPriceInputRef}
-              type="text" inputMode="decimal" placeholder={etichettaPrezzoUnitario(item.unita)}
+              type="text" inputMode="decimal" placeholder="€ totale"
               value={quickPrice}
               onChange={e => setQuickPrice(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && confermaQuickPrice(item)}
@@ -2274,32 +2234,23 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               />
             </div>
           </div>
-          {/* Qtà, Unità, Totale */}
+          {/* Qtà, Unità (solo promemoria, nessun calcolo), Totale scritto a mano */}
           <div className="form-row">
             <div className="form-group" style={{maxWidth:'60px'}}>
               <label>Qtà</label>
-              <input type="text" inputMode="decimal" value={form.qta} onChange={e => handleFormQtaChange(e.target.value)} />
+              <input type="text" inputMode="decimal" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
             </div>
             <div className="form-group" style={{maxWidth:'70px'}}>
               <label>Unità</label>
-              <select value={form.unita} onChange={e => handleFormUnitaChange(e.target.value)}>
+              <select value={form.unita} onChange={e => setForm(f => ({...f, unita: e.target.value}))}>
                 {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
               </select>
-            </div>
-            <div className="form-group" style={{maxWidth:'85px'}}>
-              <label>{etichettaPrezzoUnitario(form.unita)}</label>
-              <input type="text" inputMode="decimal" placeholder="0,00" value={form.prezzoUnitario} onChange={e => handleFormUnitChange(e.target.value)} />
             </div>
             <div className="form-group" style={{maxWidth:'85px'}}>
               <label>€ totale</label>
               <input type="text" inputMode="decimal" placeholder="0,00" value={form.prezzoTotale} onChange={e => setForm(f => ({...f, prezzoTotale: e.target.value}))} />
             </div>
           </div>
-          {form.unita === 'g' && (
-            <div style={{fontSize:'12px',color:'var(--text2)',marginTop:'-6px',marginBottom:'10px'}}>
-              ℹ️ Per i grammi, il prezzo si intende all'etto (ogni 100 g) — come indicato di solito ai banchi salumeria/gastronomia/macelleria.
-            </div>
-          )}
           {/* Categoria */}
           <div className="form-row">
             <div className="form-group">
