@@ -391,7 +391,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v50";
+const APP_VERSION = "v51";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1381,7 +1381,12 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   // di qualunque gruppo ricorrente o singole) vengono racchiuse in un unico riquadro con
   // cornice, per capire a colpo d'occhio se in quel mese resta ancora qualcosa in sospeso,
   // senza dover scorrere tutto l'elenco cercandole. I mesi sono ordinati cronologicamente;
-  // dentro ogni mese le rate già pagate compaiono per prime, poi le altre in ordine di data.
+  // dentro ogni mese le voci sono ordinate per descrizione (v50), non più per data/pagata,
+  // così le scadenze omonime o quasi identiche (es. varie "Rottamazione Quater Giorgio")
+  // finiscono vicine tra loro invece che sparse. L'ordinamento è "naturale": i numeri
+  // presenti nel testo (es. un codice come "011 0180") vengono confrontati come numeri e
+  // non lettera per lettera, così "...0180" precede correttamente "...0250" invece di
+  // finire dopo per un confronto puramente alfabetico delle singole cifre.
   const gruppiPerMese = {};
   for (const s of (data.scadenze || [])) {
     const chiaveMese = s.date.slice(0, 7); // "yyyy-mm"
@@ -1390,10 +1395,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   }
   const mesiOrdinati = Object.keys(gruppiPerMese).sort();
   for (const chiave of mesiOrdinati) {
-    gruppiPerMese[chiave].sort((a, b) => {
-      if (a.pagato !== b.pagato) return a.pagato ? -1 : 1;
-      return a.date.localeCompare(b.date);
-    });
+    gruppiPerMese[chiave].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'it', { numeric: true, sensitivity: 'base' }));
   }
 
   // Totale scadenze del mese corrente (quello di oggi), da mostrare in evidenza in cima alla scheda.
@@ -1570,10 +1572,14 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
 
       {mesiOrdinati.map(chiaveMese => {
         const [meseAnno, meseNum] = chiaveMese.split('-').map(Number);
+        const totMeseRiquadro = gruppiPerMese[chiaveMese].reduce((a, s) => a + Number(s.amount || 0), 0);
         return (
         <div key={chiaveMese} style={{border:'2px solid var(--accent)',borderRadius:'14px',padding:'10px',marginBottom:'16px'}}>
-          <div style={{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--accent)',padding:'2px 6px 8px'}}>
-            {monthLabel(meseAnno, meseNum)}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 6px 8px'}}>
+            <span style={{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--accent)'}}>
+              {monthLabel(meseAnno, meseNum)}
+            </span>
+            <span style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}>{formatEuro(totMeseRiquadro)}</span>
           </div>
           {gruppiPerMese[chiaveMese].map(s => {
             const st = statoBtn(s);
