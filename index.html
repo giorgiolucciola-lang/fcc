@@ -391,7 +391,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v51";
+const APP_VERSION = "v52";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2373,6 +2373,17 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
   }
   const catSort = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
 
+  // Raggruppa le spese del mese per descrizione esatta (es. "Conad", "Laura"): a differenza
+  // del raggruppamento per categoria qui sopra, questo mostra ogni descrizione UNA sola volta
+  // con il totale sommato di tutte le spese con quella stessa descrizione in quel mese —
+  // utile per capire a colpo d'occhio quanto si è speso complessivamente da un certo negozio
+  // o per una certa persona/voce ricorrente, indipendentemente dalla categoria/data.
+  const byDesc = {};
+  for (const s of speseMese) {
+    byDesc[s.desc] = (byDesc[s.desc] || 0) + Number(s.amount);
+  }
+  const descSort = Object.entries(byDesc).sort((a, b) => b[1] - a[1]);
+
   // Raggruppa le spese per categoria, con elenco delle singole voci ordinate per data (più recenti prima)
   const speseByCat = {};
   for (const s of speseMese) {
@@ -2513,6 +2524,24 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
         {totale > 0 && (
           <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
             <span>Totale movimenti</span><span style={{color:'var(--red)'}}>{formatEuro(totale)}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">🏷️ Spese per descrizione</div>
+        {descSort.length === 0 && <div className="empty">Nessuna spesa questo mese</div>}
+        {descSort.map(([desc, amt]) => (
+          <div className="spesa-item" key={desc}>
+            <div style={{flex:1}}>
+              <div className="spesa-desc">{desc}</div>
+            </div>
+            <div className="spesa-amount">{formatEuro(amt)}</div>
+          </div>
+        ))}
+        {totale > 0 && (
+          <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
+            <span>Totale</span><span style={{color:'var(--red)'}}>{formatEuro(totale)}</span>
           </div>
         )}
       </div>
