@@ -391,7 +391,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v49";
+const APP_VERSION = "v50";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2392,6 +2392,18 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
     .sort((a, b) => b.date.localeCompare(a.date));
   const totScadPagate = scadenzePagate.reduce((a, s) => a + Number(s.amount || 0), 0);
 
+  // Raggruppamento per mese dello storico pagate (v50), stesso schema visivo già usato
+  // nella tab Scadenze: un riquadro per mese con etichetta e totale del mese, mesi
+  // ordinati dal più recente al più vecchio. Dentro ogni mese l'ordine resta quello
+  // già calcolato sopra (per data di scadenza, più recente in cima).
+  const scadPagateByMese = {};
+  for (const s of scadenzePagate) {
+    const chiaveMese = s.date.slice(0, 7); // "yyyy-mm"
+    if (!scadPagateByMese[chiaveMese]) scadPagateByMese[chiaveMese] = [];
+    scadPagateByMese[chiaveMese].push(s);
+  }
+  const mesiPagateOrdinati = Object.keys(scadPagateByMese).sort((a, b) => b.localeCompare(a));
+
   function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
   function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
 
@@ -2507,18 +2519,33 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
           </button>
         </div>
         {scadenzePagate.length === 0 && <div className="empty">Nessuna scadenza pagata{scadFiltroMese ? ' in questo mese' : ''}</div>}
-        {scadenzePagate.map(s => (
-          <div className="scad-item pagato" key={s.id}>
-            <div className="scad-info">
-              <div className="scad-name">{s.nome} {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null}</div>
-              <div className="scad-date">
-                Scadenza: {formatDataIT(s.date)}
-                {s.dataPagamento && <span> · Pagata il {formatDataIT(s.dataPagamento)}</span>}
+        {mesiPagateOrdinati.map(chiaveMese => {
+          const [meseAnno, meseNum] = chiaveMese.split('-').map(Number);
+          const rateDelMese = scadPagateByMese[chiaveMese];
+          const totMese = rateDelMese.reduce((a, s) => a + Number(s.amount || 0), 0);
+          return (
+            <div key={chiaveMese} style={{border:'2px solid var(--green)',borderRadius:'14px',padding:'10px',marginBottom:'12px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 6px 8px'}}>
+                <span style={{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'0.07em',color:'var(--green)'}}>
+                  {monthLabel(meseAnno, meseNum)}
+                </span>
+                <span style={{fontSize:'12px',fontWeight:'700',color:'var(--green)'}}>{formatEuro(totMese)}</span>
               </div>
+              {rateDelMese.map(s => (
+                <div className="scad-item pagato" key={s.id}>
+                  <div className="scad-info">
+                    <div className="scad-name">{s.nome} {s.numerata && s.rataNum ? <span style={{fontSize:'11px',color:'var(--accent-dark)',fontWeight:'700'}}>Rata {s.rataNum}</span> : null}</div>
+                    <div className="scad-date">
+                      Scadenza: {formatDataIT(s.date)}
+                      {s.dataPagamento && <span> · Pagata il {formatDataIT(s.dataPagamento)}</span>}
+                    </div>
+                  </div>
+                  <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+                </div>
+              ))}
             </div>
-            <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
-          </div>
-        ))}
+          );
+        })}
         {scadenzePagate.length > 0 && (
           <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:'700'}}>
             <span>Totale</span><span style={{color:'var(--green)'}}>{formatEuro(totScadPagate)}</span>
