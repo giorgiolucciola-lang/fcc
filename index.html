@@ -396,7 +396,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v58";
+const APP_VERSION = "v59";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -737,9 +737,21 @@ function App() {
     if (!items || !items.length) return Promise.resolve();
     return applyUpdate({ [field]: firebase.firestore.FieldValue.arrayRemove(...items) });
   }
+  // v59: togli + rimetti la voce in UN solo salvataggio (batch). Prima erano due
+  // salvataggi separati: tra l'uno e l'altro l'app vedeva per un attimo la voce
+  // sparita e poi ricomparsa (sull'iPhone gli ultimi "già presi" lampeggiavano).
   async function updateItem(field, oldItem, newItem) {
-    await removeItems(field, [oldItem]);
-    await addItems(field, [newItem]);
+    if (!user) return;
+    const ref = db.collection('users').doc(user.uid);
+    const batch = db.batch();
+    batch.update(ref, { [field]: firebase.firestore.FieldValue.arrayRemove(oldItem) });
+    batch.update(ref, { [field]: firebase.firestore.FieldValue.arrayUnion(newItem) });
+    setSyncing(true);
+    try {
+      await batch.commit();
+    } finally {
+      setSyncing(false);
+    }
   }
 
   function login() { auth.signInWithPopup(provider); }

@@ -1,6 +1,6 @@
 // ── Service Worker FCC ────────────────────────────────────────────────────────
 // Incrementa CACHE_VERSION ad ogni deploy per forzare l'aggiornamento della PWA
-const CACHE_VERSION = "fcc-v58";
+const CACHE_VERSION = "fcc-v59";
 const CACHE_FILES = [
   "/fcc/",
   "/fcc/index.html",
@@ -83,4 +83,3 @@ messaging.onBackgroundMessage(payload => {
   };
   self.registration.showNotification(titolo, opzioni);
 });
-
