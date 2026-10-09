@@ -187,6 +187,13 @@ select:required:valid:not(:focus) {
 .summary-card.entrate .amount { color: var(--green); }
 .summary-card.uscite .amount { color: var(--red); }
 .summary-card.saldo .amount { color: var(--accent); }
+.uscite-split { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border2); font-size: 11px; color: var(--text2); }
+.uscite-split div { display: flex; justify-content: space-between; gap: 4px; line-height: 1.6; }
+.uscite-split span:last-child { font-weight: 600; white-space: nowrap; }
+.scad-tipo-box { border: 1.5px solid var(--border2); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
+.scad-tipo-header { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13px; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.scad-tipo-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.scad-tipo-row + .scad-tipo-row { border-top: 1px solid var(--border); }
 
 /* SPESE per giorno */
 .day-group { margin-bottom: 18px; }
@@ -247,28 +254,38 @@ select:required:valid:not(:focus) {
   justify-content: flex-end; margin-left: auto;
 }
 
-/* SPESA (lista) */
-.spesa-lista-item {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 10px 14px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: 8px;
-  margin-bottom: 6px;
-}
-.spesa-lista-item > span { min-width: 0; word-break: break-word; }
-.spesa-lista-item.checked { opacity: 0.5; text-decoration: line-through; }
-.spesa-lista-item input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
-/* Campo numerico a inizio riga per assegnare/spostare la tappa (v37): dimensione simile
-   al quadratino del checkbox che segue subito dopo, per stare bene affiancati */
-.spesa-lista-item .tappa-pos-input { width: 26px; height: 18px; padding: 0; font-size: 12px; text-align: center; flex-shrink: 0; background: var(--blue-bg); border-color: var(--blue-border); color: var(--blue); font-weight: 700; }
-.spesa-lista-item .qta-input { width: 40px; padding: 6px 4px; font-size: 13px; text-align: center; flex-shrink: 0; }
-.spesa-lista-item .unita-select { width: 52px; padding: 6px 2px; font-size: 12px; flex-shrink: 0; }
-.spesa-lista-item .prezzo-input { width: 64px; padding: 6px 6px; font-size: 13px; flex-shrink: 0; }
-.spesa-lista-item .prezzo-input.tot { font-weight: 700; }
-.spesa-lista-item .bp-btn { flex-shrink: 0; padding: 5px 8px; }
-/* Su schermi larghi il wrapper non deve introdurre un box proprio: i suoi figli
-   (checkbox + nome) restano semplici elementi diretti della riga flessibile,
-   esattamente come prima. Diventa un vero flex box solo sotto i 480px (v30). */
-.spesa-nome-row { display: contents; }
+/* LISTA DELLA SPESA COMPATTA (v54) — caratteri grandi per iPhone; tutti i campi
+   hanno font ≥16px, altrimenti iOS ingrandisce la pagina quando li tocchi */
+.ls-tappe { background: var(--giallo-bg); border: 1.5px solid var(--giallo-border); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.ls-tappe.completo { background: var(--green-bg); border-color: var(--green); }
+.ls-tappe-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #8a6a00; }
+.ls-tappe.completo .ls-tappe-head { color: #0e7a3d; }
+.ls-tappe-sub { font-size: 14px; color: #0e7a3d; margin-top: 4px; }
+.ls-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ls-chip { font-size: 15px; padding: 4px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--giallo-border); color: var(--text); }
+.ls-chip.fatta { background: var(--green-bg); border-color: var(--green-border); color: #0e7a3d; font-weight: 600; }
+.ls-add { background: var(--accent-light); border: 1px solid var(--border2); border-radius: 12px; padding: 10px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+.ls-add-row { display: flex; gap: 8px; }
+.ls-input, input.ls-input[type=text], select.ls-input { font-size: 17px; padding: 10px 10px; min-height: 46px; }
+.ls-add-qta { width: 90px !important; flex-shrink: 0; }
+.ls-add-negozio { flex: 1; min-width: 0; }
+.ls-add-btn { font-size: 24px; padding: 0 16px; min-width: 52px; line-height: 1; }
+.ls-negozio { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px 12px 10px; margin-bottom: 12px; }
+.ls-negozio.fatto { border-color: var(--green-border); background: #fbfefc; }
+.ls-negozio-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: var(--accent-dark); padding: 10px 0 6px; border-bottom: 1px solid var(--border); }
+.ls-negozio.fatto .ls-negozio-head { color: #0e7a3d; }
+.ls-negozio-count { font-size: 14px; font-weight: 600; color: var(--text2); white-space: nowrap; }
+.ls-negozio.fatto .ls-negozio-count { color: #0e7a3d; }
+.ls-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); min-height: 54px; }
+.ls-check { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; border: 2px solid var(--border2); background: #fff; color: #fff; font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer; padding: 0; }
+.ls-item.presa .ls-check { background: var(--green); border-color: var(--green); }
+.ls-nome { flex: 1; min-width: 0; font-size: 18px; color: var(--text); overflow-wrap: anywhere; }
+.ls-item.presa .ls-nome { color: var(--text3); text-decoration: line-through; }
+input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding: 7px 6px; text-align: center; color: var(--text2); background: var(--surface2); border-color: var(--border); }
+.ls-del { background: none; border: none; color: var(--text3); font-size: 18px; padding: 8px 2px 8px 6px; cursor: pointer; flex-shrink: 0; }
+.ls-cassa { display: flex; gap: 10px; padding-top: 10px; }
+.ls-cassa label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 600; color: var(--text2); }
+.btn.primary.ls-registra { width: 100%; color: #fff; font-size: 17px; padding: 14px; background: var(--green); border-color: var(--green); }
 
 /* REPORT */
 .report-cat-bar { margin-bottom: 10px; }
@@ -357,6 +374,8 @@ select:required:valid:not(:focus) {
   .summary-card { padding: 11px 6px; }
   .summary-card .label { font-size: 10px; }
   .summary-card .amount { font-size: 16px; word-break: break-word; }
+  .uscite-split { font-size: 10px; }
+  .uscite-split div { flex-direction: column; align-items: center; gap: 0; line-height: 1.3; margin-bottom: 3px; }
 
   .month-label { font-size: 14px; min-width: 0; }
 
@@ -366,22 +385,7 @@ select:required:valid:not(:focus) {
   .form-group { min-width: 90px; }
   input[type=date] { padding: 14px 12px; font-size: 18px; min-height: 50px; }
 
-  .spesa-lista-item .tappa-pos-input { width: 34px; height: 34px; font-size: 16px; padding: 0; }
-  .spesa-lista-item .qta-input { width: 50px; font-size: 16px; padding: 9px 4px; }
-  .spesa-lista-item .unita-select { width: 58px; font-size: 13px; padding: 9px 2px; }
-  .spesa-lista-item .prezzo-input { width: 76px; font-size: 16px; padding: 9px 6px; }
-  .spesa-lista-item .bp-btn { padding: 8px 11px; font-size: 14px; }
-
-  /* Checkbox + nome prodotto su una riga propria a tutta larghezza: così i campi
-     quantità/prezzo, non trovando più spazio nella stessa riga, scendono automaticamente
-     sotto invece di sovrapporsi visivamente al testo del nome (bug corretto in v30). */
-  .spesa-nome-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1 1 100%;
-    min-width: 0;
-  }
+  .ls-nome { font-size: 18px; }
 }
 </style>
 </head>
@@ -391,7 +395,7 @@ select:required:valid:not(:focus) {
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v52";
+const APP_VERSION = "v54";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -600,6 +604,16 @@ const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'P
 // (es. Supermercato, Fruttivendolo, Farmacia...). Concetto separato dalla categoria
 // del prodotto: la categoria dice COSA è, la tappa dice DOVE si compra.
 const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia', 'Altro'];
+// Categoria Budget proposta per un negozio, se non è stata scelta in Impostazioni (v54):
+// alimentari → Cibo, farmacia → Salute, tutto il resto → Altro (solo se la categoria esiste).
+function categoriaBudgetDefault(negozio, categorieBudget) {
+  const n = (negozio || '').toLowerCase();
+  let proposta = 'Altro';
+  if (/farmac|parafarm/.test(n)) proposta = 'Salute';
+  else if (/superm|fruttiv|macell|panific|forno|alimentar|discount|pescher|salumer|ortofrutt|mercato/.test(n)) proposta = 'Cibo';
+  if ((categorieBudget || []).includes(proposta)) return proposta;
+  return (categorieBudget || []).includes('Altro') ? 'Altro' : ((categorieBudget || [])[0] || 'Altro');
+}
 // Unità di misura per la quantità nella lista della spesa: dice se il numero in "Qtà"
 // rappresenta pezzi, chili, grammi o litri, così non resta ambiguo (es. "2" di cosa?)
 const UNITA_OPZIONI = [
@@ -861,6 +875,32 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
   const totScadenze = scadenzeMese.reduce((a, sc) => a + Number(sc.amount || 0), 0);
   const saldo = totEntrate - totSpese - totScadenze;
 
+  // ── Scadenze del mese raggruppate per tipo (v53) ──────────────────────────
+  // Il "tipo" è ricavato dal nome della scadenza togliendo numeri, codici e la parola
+  // "rata": così ad es. "Rottamazione Quater Giorgio 011 0180" e "... 011 0250" finiscono
+  // nello stesso riquadro "Rottamazione Quater Giorgio". Ogni gruppo ha il suo subtotale.
+  function tipoScadenza(nome) {
+    const pulito = (nome || '')
+      .split(/\s+/)
+      .filter(w => w && !/\d/.test(w) && !/^(rata|n\.?|nr\.?|num\.?|-|–|\/|#)$/i.test(w))
+      .join(' ')
+      .trim();
+    return pulito || (nome || 'Senza nome').trim();
+  }
+  const gruppiScadMese = {};
+  for (const sc of scadenzeMese) {
+    const label = tipoScadenza(sc.nome);
+    const chiave = label.toLowerCase();
+    if (!gruppiScadMese[chiave]) gruppiScadMese[chiave] = { label, voci: [] };
+    gruppiScadMese[chiave].voci.push(sc);
+  }
+  const gruppiScadOrdinati = Object.values(gruppiScadMese)
+    .map(g => ({ ...g, totale: g.voci.reduce((a, sc) => a + Number(sc.amount || 0), 0) }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'it', { numeric: true, sensitivity: 'base' }));
+  for (const g of gruppiScadOrdinati) {
+    g.voci.sort((a, b) => a.date.localeCompare(b.date) || (a.nome || '').localeCompare(b.nome || '', 'it', { numeric: true, sensitivity: 'base' }));
+  }
+
   // Raggruppa spese per giorno, ordine cronologico inverso (giorno più recente in cima)
   const spesePorGiorno = {};
   for (const s of speseMese) {
@@ -933,17 +973,16 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
         <div className="summary-card uscite">
           <div className="label">Uscite</div>
           <div className="amount">{formatEuro(totSpese + totScadenze)}</div>
+          <div className="uscite-split">
+            <div><span>Spese</span><span>{formatEuro(totSpese)}</span></div>
+            <div><span>Scadenze</span><span>{formatEuro(totScadenze)}</span></div>
+          </div>
         </div>
         <div className="summary-card saldo">
           <div className="label">Saldo</div>
           <div className="amount" style={{color: saldo >= 0 ? 'var(--green)' : 'var(--red)'}}>{formatEuro(saldo)}</div>
         </div>
       </div>
-      {totScadenze > 0 && (
-        <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'14px',marginTop:'-6px',textAlign:'center'}}>
-          di cui {formatEuro(totScadenze)} di scadenze in questo mese
-        </div>
-      )}
 
       {/* ENTRATE */}
       <div className="card">
@@ -1113,6 +1152,37 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
                     </div>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* SCADENZE DEL MESE, raggruppate per tipo */}
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+          <div className="card-title" style={{marginBottom:0}}>📅 Scadenze del mese</div>
+          <div style={{fontWeight:700,color:'var(--red)'}}>{formatEuro(totScadenze)}</div>
+        </div>
+        {gruppiScadOrdinati.length === 0 && <div className="empty">Nessuna scadenza questo mese</div>}
+        {gruppiScadOrdinati.map(g => (
+          <div className="scad-tipo-box" key={g.label}>
+            <div className="scad-tipo-header">
+              <span>{g.label}{g.voci.length > 1 ? ` (${g.voci.length})` : ''}</span>
+              <span>{formatEuro(g.totale)}</span>
+            </div>
+            {g.voci.map(sc => (
+              <div className="scad-tipo-row" key={sc.id}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div className="spesa-desc">{sc.nome}</div>
+                  <div className="spesa-cat">
+                    {formatDataIT(sc.date)}{' · '}
+                    {sc.pagato
+                      ? <span style={{color:'var(--green)',fontWeight:600}}>✓ Pagata</span>
+                      : <span style={{color:'var(--orange)',fontWeight:600}}>Da pagare</span>}
+                  </div>
+                </div>
+                <div className="spesa-amount">{formatEuro(sc.amount)}</div>
               </div>
             ))}
           </div>
@@ -1862,484 +1932,254 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
 
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
 function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, askConfirm }) {
-  const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ nome: '', cat: '', sottocat: '', tappa: '', qta: '1', unita: 'pz', prezzoTotale: '' });
-  const [newCatInline, setNewCatInline] = useState('');
-  const [showNewCat, setShowNewCat] = useState(false);
-  const [newSottocatInline, setNewSottocatInline] = useState('');
-  const [showNewSottocat, setShowNewSottocat] = useState(false);
-  const [newTappaInline, setNewTappaInline] = useState('');
-  const [showNewTappa, setShowNewTappa] = useState(false);
-  // Articolo per cui è aperto il riquadro "prezzo rapido" (flusso spunta+prezzo in un solo tocco)
-  const [quickPriceId, setQuickPriceId] = useState(null);
-  const [quickPrice, setQuickPrice] = useState('');
-  const quickPriceInputRef = useRef(null);
-  // Bozza locale per il campo numerico "tappa" a inizio riga (stesso pattern di qta/prezzi:
-  // mentre si digita il numero resta solo in memoria, si applica su blur/Invio)
-  const [tappaPosDrafts, setTappaPosDrafts] = useState({});
-
-  // Nomi prodotto già usati in passato (storico persistente + articoli attualmente in lista),
-  // per il completamento automatico del campo "Prodotto"
-  const prodottiNote = Array.from(new Set([...(data.storicoProdotti || []), ...((data.listaSpesa || []).map(i => i.nome))].filter(Boolean)));
-
-  // Elenco categorie robusto: se l'array è vuoto o assente, usa i default
-  const catList = (data.categorieLista && data.categorieLista.length) ? data.categorieLista : DEFAULT_SPESA_CATS;
-  // Elenco tappe (negozi) robusto: se l'array è vuoto o assente, usa i default
+  // ── LISTA DELLA SPESA COMPATTA (v54) ─────────────────────────────────────────
+  // Pensata per l'uso in negozio con una mano sola: per ogni prodotto servono solo
+  // nome, quantità (testo libero: "2", "2 etti", "1 kg") e negozio. Il prezzo NON si
+  // scrive più prodotto per prodotto: si scrive una volta sola il totale dello scontrino
+  // alla cassa di ogni negozio, con l'eventuale parte pagata in buoni pasto.
+  // "Negozio" e "tappa" sono la stessa cosa: l'elenco (e l'ordine del giro) è quello
+  // di Impostazioni → Negozi del giro spesa.
   const tappaList = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
-  // Sottocategorie disponibili per la categoria attualmente selezionata nel form
-  const sottocatList = ((data.sottocategorieLista || {})[form.cat]) || [];
+  const ultimoNegozio = (() => { try { return localStorage.getItem('fcc-ultimo-negozio') || ''; } catch (e) { return ''; } })();
+  const [form, setForm] = useState({ nome: '', qta: '', tappa: tappaList.includes(ultimoNegozio) ? ultimoNegozio : tappaList[0] });
+  // Bozze locali per i campi cassa (si salvano su Firebase solo all'uscita dal campo)
+  const [cassaDrafts, setCassaDrafts] = useState({});
+  const [qtaDrafts, setQtaDrafts] = useState({});
 
-  useEffect(() => {
-    if (quickPriceId && quickPriceInputRef.current) {
-      quickPriceInputRef.current.focus();
-    }
-  }, [quickPriceId]);
+  const prodottiNote = Array.from(new Set([...(data.storicoProdotti || []), ...((data.listaSpesa || []).map(i => i.nome))].filter(Boolean)));
+  const lista = data.listaSpesa || [];
+  const casse = data.casseSpesa || [];
 
-  // Aggiunta di categoria/sottocategoria/tappa "al volo" dal form: usa scritture ATOMICHE
-  // (arrayUnion, anche su campo annidato per le sottocategorie tramite dot-notation)
-  // invece di saveData (che riscrive tutto il documento). Prima di questa correzione,
-  // se si aggiungeva una nuova categoria e subito dopo una nuova sottocategoria (o si
-  // aggiungeva un articolo alla lista quasi nello stesso istante), la seconda scrittura
-  // "vecchio stile" poteva sovrascrivere e far sparire la modifica appena fatta dalla prima
-  // (bug segnalato da Giorgio: la categoria "Cibo" spariva al secondo inserimento).
-  function addCatInline() {
-    const nuova = newCatInline.trim();
-    if (!nuova) return;
-    applyUpdate({ categorieLista: firebase.firestore.FieldValue.arrayUnion(nuova) });
-    setForm(f => ({ ...f, cat: nuova }));
-    setNewCatInline('');
-    setShowNewCat(false);
-  }
-
-  function addSottocatInline() {
-    const nuova = newSottocatInline.trim();
-    if (!nuova || !form.cat) return;
-    applyUpdate({ [`sottocategorieLista.${form.cat}`]: firebase.firestore.FieldValue.arrayUnion(nuova) });
-    setForm(f => ({ ...f, sottocat: nuova }));
-    setNewSottocatInline('');
-    setShowNewSottocat(false);
-  }
-
-  function addTappaInline() {
-    const nuova = newTappaInline.trim();
-    if (!nuova) return;
-    applyUpdate({ tappeLista: firebase.firestore.FieldValue.arrayUnion(nuova) });
-    setForm(f => ({ ...f, tappa: nuova }));
-    setNewTappaInline('');
-    setShowNewTappa(false);
-  }
+  function cassaDi(t) { return casse.find(c => c.tappa === t); }
 
   function add() {
-    if (!form.nome) return;
     const nomeTrim = form.nome.trim();
-    const catTrim = form.cat.trim();
-    const sottocatTrim = form.sottocat.trim();
-    const item = { id: Date.now(), nome: nomeTrim, cat: catTrim || 'Altro', sottocat: sottocatTrim, tappa: form.tappa || 'Altro', qta: form.qta || '1', unita: form.unita || 'pz', prezzoTotale: form.prezzoTotale || '', checked: false, buonoPasto: false };
+    if (!nomeTrim) return;
+    const tappa = form.tappa || tappaList[0] || 'Altro';
+    const item = { id: Date.now(), nome: nomeTrim, qta: form.qta.trim(), tappa, checked: false };
     addItems('listaSpesa', [item]);
-    // Salva il nome nello storico prodotti (persiste anche dopo "Registra spesa", a differenza
-    // della lista stessa), così il completamento automatico funziona anche per articoli già acquistati
-    if (nomeTrim && !(data.storicoProdotti || []).includes(nomeTrim)) {
-      addItems('storicoProdotti', [nomeTrim]);
-    }
-    // Il campo Categoria ora è testo libero con suggerimenti: se è stata digitata una
-    // categoria nuova (non ancora in archivio), la aggiunge da sola all'elenco, così
-    // sarà suggerita anche la prossima volta. Scrittura atomica (arrayUnion): non
-    // rischia più di essere persa se parte insieme ad altre scritture (es. la
-    // sottocategoria qui sotto, o l'articolo appena aggiunto sopra).
-    if (catTrim && !catList.includes(catTrim)) {
-      applyUpdate({ categorieLista: firebase.firestore.FieldValue.arrayUnion(catTrim) });
-    }
-    // Stessa logica per la sottocategoria, archiviata sotto la categoria scelta.
-    // Anche qui scrittura atomica su campo annidato (dot-notation), invece di
-    // saveData: era proprio questa la causa del bug segnalato da Giorgio (la
-    // categoria appena salvata spariva al secondo inserimento).
-    if (catTrim && sottocatTrim && !sottocatList.includes(sottocatTrim)) {
-      applyUpdate({ [`sottocategorieLista.${catTrim}`]: firebase.firestore.FieldValue.arrayUnion(sottocatTrim) });
-    }
-    setForm({ nome: '', cat: '', sottocat: '', tappa: form.tappa || '', qta: '1', unita: form.unita || 'pz', prezzoTotale: '' });
+    if (!(data.storicoProdotti || []).includes(nomeTrim)) addItems('storicoProdotti', [nomeTrim]);
+    try { localStorage.setItem('fcc-ultimo-negozio', tappa); } catch (e) {}
+    setForm(f => ({ nome: '', qta: '', tappa: f.tappa }));
   }
   function toggle(item) {
-    if (item.checked) {
-      // Da "già preso" a "da prendere": semplice riapertura, nessun prezzo da chiedere
-      updateItem('listaSpesa', item, { ...item, checked: false });
-      return;
-    }
-    // Da "da prendere" a "preso": se ha già un prezzo, spunta subito senza chiedere altro.
-    // Altrimenti apre il riquadro "prezzo rapido" per inserirlo e confermare in un solo tocco.
-    if ((parseNumIT(item.prezzoTotale) || 0) > 0) {
-      updateItem('listaSpesa', item, { ...item, checked: true });
-    } else {
-      setQuickPrice('');
-      setQuickPriceId(item.id);
-    }
-  }
-  // Conferma del riquadro "prezzo rapido": salva il totale (se inserito, scritto sempre a mano —
-  // nessun calcolo automatico) e spunta l'articolo, in un solo aggiornamento
-  function confermaQuickPrice(item) {
-    updateItem('listaSpesa', item, { ...item, prezzoTotale: quickPrice || item.prezzoTotale || '', checked: true });
-    setQuickPriceId(null);
-    setQuickPrice('');
-  }
-  // Spunta senza inserire un prezzo (utile se non lo conosci ancora, lo aggiungerai dopo tra i "Già presi")
-  function confermaSenzaPrice(item) {
-    updateItem('listaSpesa', item, { ...item, checked: true });
-    setQuickPriceId(null);
-    setQuickPrice('');
-  }
-  function annullaQuickPrice() {
-    setQuickPriceId(null);
-    setQuickPrice('');
+    updateItem('listaSpesa', item, { ...item, checked: !item.checked });
   }
   async function del(item) {
     const ok = await askConfirm(`Eliminare "${item.nome}" dalla lista?`);
     if (!ok) return;
     removeItems('listaSpesa', [item]);
   }
-  async function clearChecked() {
-    const ok = await askConfirm(`Svuotare ${presi.length} articolo${presi.length > 1 ? 'i' : ''} già pres${presi.length > 1 ? 'i' : 'o'} SENZA registrarli come spesa? L'azione non è annullabile.`);
-    if (!ok) return;
-    removeItems('listaSpesa', presi);
+  function qtaVal(item) {
+    return qtaDrafts[item.id] !== undefined ? qtaDrafts[item.id] : (item.qta === '1' ? '' : (item.qta || ''));
   }
-  // ── BOZZE LOCALI per quantità/prezzi ──────────────────────────────────────
-  // Problema risolto: prima, ogni singolo tasto premuto in questi campi scriveva
-  // SUBITO su Firebase (rimozione + reinserimento dell'articolo). Digitando in
-  // fretta un numero con la virgola, il giro di andata/ritorno col database a
-  // volte "perdeva" l'ultima cifra digitata (es. i decimali del prezzo).
-  // Ora invece: mentre scrivi, il valore resta solo in memoria locale (istantaneo,
-  // nessuna cifra persa); il salvataggio su Firebase avviene solo quando esci dal
-  // campo (tocchi altrove / chiudi la tastiera) o premi Invio.
-  const [drafts, setDrafts] = useState({});
-  function draftVal(item, field) {
-    const d = drafts[item.id];
-    if (d && d[field] !== undefined) return d[field];
-    if (field === 'qta') return item[field] || '1';
-    if (field === 'unita') return item[field] || 'pz';
-    return item[field] || '';
+  function commitQta(item) {
+    const v = qtaDrafts[item.id];
+    setQtaDrafts(d => { const p = { ...d }; delete p[item.id]; return p; });
+    if (v === undefined || v.trim() === (item.qta || '')) return;
+    updateItem('listaSpesa', item, { ...item, qta: v.trim() });
   }
-  // L'unità è solo un'etichetta descrittiva (promemoria di cosa si è preso): cambiarla non
-  // ricalcola nulla, si salva subito senza bisogno di conferma separata.
-  function setDraftUnita(item, val) {
-    setDrafts(d => { const p = { ...d }; delete p[item.id]; return p; });
-    updateItem('listaSpesa', item, { ...item, unita: val });
+
+  // ── Cassa di ogni negozio: totale scontrino + parte pagata con buoni pasto ──
+  function cassaVal(t, campo) {
+    const d = cassaDrafts[t];
+    if (d && d[campo] !== undefined) return d[campo];
+    const c = cassaDi(t);
+    return c && c[campo] ? Number(c[campo]).toFixed(2).replace('.', ',') : '';
   }
-  function setDraftQta(item, val) {
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], qta: val } }));
+  function setCassaDraft(t, campo, val) {
+    setCassaDrafts(d => ({ ...d, [t]: { ...d[t], [campo]: val } }));
   }
-  function setDraftTotale(item, val) {
-    setDrafts(d => ({ ...d, [item.id]: { ...d[item.id], prezzoTotale: val } }));
-  }
-  // Invia a Firebase la bozza accumulata per un articolo (chiamata su blur/Invio)
-  function commitDraft(item) {
-    const d = drafts[item.id];
+  function commitCassa(t) {
+    const d = cassaDrafts[t];
+    setCassaDrafts(prev => { const p = { ...prev }; delete p[t]; return p; });
     if (!d) return;
-    const newItem = { ...item, ...d };
-    updateItem('listaSpesa', item, newItem);
-    setDrafts(prev => { const p = { ...prev }; delete p[item.id]; return p; });
+    const vecchia = cassaDi(t);
+    const totale = parseNumIT(d.totale !== undefined ? d.totale : (vecchia ? String(vecchia.totale) : '')) || 0;
+    const buoni = parseNumIT(d.buoni !== undefined ? d.buoni : (vecchia ? String(vecchia.buoni || '') : '')) || 0;
+    const nuova = { id: vecchia ? vecchia.id : Date.now(), tappa: t, totale: Math.round(totale * 100) / 100, buoni: Math.round(buoni * 100) / 100 };
+    if (vecchia && vecchia.totale === nuova.totale && (vecchia.buoni || 0) === nuova.buoni) return;
+    if (vecchia && totale <= 0 && buoni <= 0) {
+      applyUpdate({ casseSpesa: firebase.firestore.FieldValue.arrayRemove(vecchia) });
+      return;
+    }
+    if (vecchia) {
+      updateItem('casseSpesa', vecchia, nuova);
+    } else if (totale > 0 || buoni > 0) {
+      addItems('casseSpesa', [nuova]);
+    }
   }
-  // Marca/smarca un articolo come pagabile con i buoni pasto (solo etichetta visiva + totale,
-  // serve a Giorgio per non superare il limite giornaliero di spesa consentito dai buoni pasto).
-  // Al momento di "Registra spesa", gli articoli marcati NON finiscono nel Budget: il loro
-  // importo viene invece scalato dal saldo Buoni Pasto (tab Report).
-  function toggleBuonoPasto(item) {
-    updateItem('listaSpesa', item, { ...item, buonoPasto: !item.buonoPasto });
+
+  // ── Categoria Budget di ogni negozio (impostabile in Impostazioni) ──
+  function categoriaBudgetDi(t) {
+    const mappa = data.tappeCategorieBudget || {};
+    if (mappa[t]) return mappa[t];
+    return categoriaBudgetDefault(t, data.categorie || DEFAULT_CATS);
   }
-  // Campo numerico a inizio riga per cambiare tappa: il numero corrisponde alla posizione
-  // della tappa nell'elenco di Impostazioni (stesso ordine mostrato nelle intestazioni
-  // "📍 1. Supermercato" qui sotto). Se manca una bozza in corso, mostra il numero della
-  // tappa attuale dell'articolo; altrimenti mostra quello che si sta digitando.
-  function tappaPosVal(item) {
-    if (tappaPosDrafts[item.id] !== undefined) return tappaPosDrafts[item.id];
-    const idx = tappaList.indexOf(item.tappa || 'Altro');
-    return idx >= 0 ? String(idx + 1) : '';
-  }
-  function setTappaPosDraft(item, val) {
-    setTappaPosDrafts(d => ({ ...d, [item.id]: val }));
-  }
-  // Applica il numero digitato solo su blur/Invio (non ad ogni cifra). Se il numero non
-  // corrisponde a nessuna tappa esistente (vuoto, non numerico, o fuori dall'intervallo
-  // 1..numero di tappe), il tentativo viene semplicemente ignorato e la tappa resta quella
-  // di prima — nessun messaggio d'errore, per non intralciare l'uso veloce al banco.
-  function commitTappaPos(item) {
-    const raw = tappaPosDrafts[item.id];
-    setTappaPosDrafts(d => { const p = { ...d }; delete p[item.id]; return p; });
-    if (raw === undefined) return;
-    const n = parseInt(raw, 10);
-    if (isNaN(n) || n < 1 || n > tappaList.length) return; // numero non logico: ignorato
-    const nuovaTappa = tappaList[n - 1];
-    if (nuovaTappa === item.tappa) return;
-    updateItem('listaSpesa', item, { ...item, tappa: nuovaTappa });
-  }
-  // A fine spesa: raggruppa per categoria gli articoli "presi" con un prezzo inserito,
-  // li registra come spese di oggi nel Budget, poi svuota la lista dei presi
-  // (un'unica operazione atomica: aggiunge le spese e rimuove gli articoli presi insieme)
+
+  // ── Tappe del giro: negozi con prodotti in lista o con uno scontrino inserito ──
+  const negoziUsati = new Set([...lista.map(i => i.tappa || 'Altro'), ...casse.map(c => c.tappa)]);
+  const tappeGiro = [
+    ...tappaList.filter(t => negoziUsati.has(t)),
+    ...Array.from(negoziUsati).filter(t => !tappaList.includes(t)),
+  ];
+  const tappaFatta = t => { const c = cassaDi(t); return !!(c && c.totale > 0); };
+  const numFatte = tappeGiro.filter(tappaFatta).length;
+  const giroCompleto = tappeGiro.length > 0 && numFatte === tappeGiro.length;
+  const totaleGiro = casse.reduce((a, c) => a + (Number(c.totale) || 0), 0);
+  const totaleBuoniGiro = casse.reduce((a, c) => a + (Number(c.buoni) || 0), 0);
+  const presi = lista.filter(i => i.checked);
+  const casseValide = casse.filter(c => (Number(c.totale) || 0) > 0);
+
+  // A fine giro: una spesa nel Budget per ogni negozio (totale meno buoni, con la
+  // categoria Budget del negozio) e un movimento "speso" nei Buoni Pasto per la parte
+  // pagata con i buoni. Poi toglie gli articoli presi e gli scontrini. I prodotti non
+  // trovati (non spuntati) restano in lista per la prossima volta.
   async function registraSpesa() {
-    const conPrezzo = presi.filter(i => (parseNumIT(i.prezzoTotale) || 0) > 0);
-    const senzaPrezzo = presi.filter(i => !((parseNumIT(i.prezzoTotale) || 0) > 0));
-    if (senzaPrezzo.length > 0) {
-      const nomi = senzaPrezzo.map(i => i.nome).join(', ');
-      const ok = await askConfirm(
-        `${senzaPrezzo.length} articolo${senzaPrezzo.length > 1 ? 'i' : ''} senza prezzo (${nomi}) ${senzaPrezzo.length > 1 ? 'non verranno registrati' : 'non verrà registrato'}.\n\nProcedere comunque?`
-      );
-      if (!ok) return;
-    }
-    // Gli articoli marcati "buono pasto" NON sono spesa reale: il loro importo va scalato
-    // dal saldo Buoni Pasto (Report) invece di entrare nel Budget.
-    const conPrezzoNormale = conPrezzo.filter(i => !i.buonoPasto);
-    const conPrezzoBP = conPrezzo.filter(i => i.buonoPasto);
-
-    const perCategoria = {};
-    for (const item of conPrezzoNormale) {
-      perCategoria[item.cat] = (perCategoria[item.cat] || 0) + (parseNumIT(item.prezzoTotale) || 0);
-    }
+    if (!casseValide.length) return;
+    const righe = casseValide.map(c => `• ${c.tappa}: ${formatEuro(c.totale)}${c.buoni > 0 ? ` (di cui buoni ${formatEuro(c.buoni)})` : ''} → ${categoriaBudgetDi(c.tappa)}`).join('\n');
+    const mancanti = tappeGiro.filter(t => !tappaFatta(t));
+    const avviso = mancanti.length ? `\n\nSenza totale cassa (restano in lista): ${mancanti.join(', ')}` : '';
+    const ok = await askConfirm(`Registrare nel Budget?\n\n${righe}${avviso}`);
+    if (!ok) return;
     const oggi = localDateStr();
-    const nuoveSpese = Object.entries(perCategoria).map(([cat, amount], idx) => ({
-      id: Date.now() + idx,
-      desc: cat === 'Altro' ? 'Spesa supermercato' : `Acquisti – ${cat}`,
-      amount: Math.round(amount * 100) / 100,
-      cat,
-      subcat: '',
-      date: oggi,
-    }));
-    const totBP = conPrezzoBP.reduce((a, i) => a + (parseNumIT(i.prezzoTotale) || 0), 0);
-    const nuoviMovimentiBP = totBP > 0 ? [{
-      id: Date.now() + 777,
-      tipo: 'speso',
-      desc: `Spesa supermercato (${conPrezzoBP.map(i => i.nome).join(', ')})`,
-      qty: null,
-      amount: Math.round(totBP * 100) / 100,
-      date: oggi,
-    }] : [];
-
+    const base = Date.now();
+    const nuoveSpese = [];
+    const nuoviBP = [];
+    casseValide.forEach((c, idx) => {
+      const buoni = Math.min(Number(c.buoni) || 0, Number(c.totale) || 0);
+      const netto = Math.round(((Number(c.totale) || 0) - buoni) * 100) / 100;
+      if (netto > 0) nuoveSpese.push({ id: base + idx, desc: `Spesa – ${c.tappa}`, amount: netto, cat: categoriaBudgetDi(c.tappa), subcat: '', date: oggi });
+      if (buoni > 0) nuoviBP.push({ id: base + 500 + idx, tipo: 'speso', desc: `Spesa – ${c.tappa}`, qty: null, amount: Math.round(buoni * 100) / 100, date: oggi });
+    });
+    const negoziChiusi = new Set(casseValide.map(c => c.tappa));
+    const daTogliere = presi.filter(i => negoziChiusi.has(i.tappa || 'Altro'));
     const updateObj = {};
     if (nuoveSpese.length) updateObj.spese = firebase.firestore.FieldValue.arrayUnion(...nuoveSpese);
-    if (nuoviMovimentiBP.length) updateObj.buoniPasto = firebase.firestore.FieldValue.arrayUnion(...nuoviMovimentiBP);
-    if (presi.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...presi);
-    if (Object.keys(updateObj).length) applyUpdate(updateObj);
+    if (nuoviBP.length) updateObj.buoniPasto = firebase.firestore.FieldValue.arrayUnion(...nuoviBP);
+    if (daTogliere.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...daTogliere);
+    updateObj.casseSpesa = firebase.firestore.FieldValue.arrayRemove(...casseValide);
+    applyUpdate(updateObj);
+    setCassaDrafts({});
   }
-  // Rendering di una riga articolo (usata sia per "da prendere" che per "già presi")
+  async function svuotaSenzaRegistrare() {
+    const ok = await askConfirm(`Togliere i ${presi.length} prodotti già presi e i totali cassa SENZA registrarli nel Budget? L'azione non è annullabile.`);
+    if (!ok) return;
+    const updateObj = {};
+    if (presi.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...presi);
+    if (casse.length) updateObj.casseSpesa = firebase.firestore.FieldValue.arrayRemove(...casse);
+    applyUpdate(updateObj);
+    setCassaDrafts({});
+  }
+
   function renderItem(item) {
-    const bp = !!item.buonoPasto;
     return (
-      <div key={item.id}>
-        <div className={`spesa-lista-item${item.checked?' checked':''}`}
-          style={bp ? {background:'var(--salmon-bg)', borderColor:'var(--salmon-border)'} : {}}>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={tappaPosVal(item)} title="Numero tappa (vedi elenco qui sopra)"
-            onChange={e => setTappaPosDraft(item, e.target.value)}
-            onBlur={() => commitTappaPos(item)}
-            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-            className="tappa-pos-input" />
-          <div className="spesa-nome-row">
-            <div style={{flex:1, minWidth:0}}>
-              <div style={{overflowWrap:'break-word', wordBreak:'break-word'}}>{item.nome}</div>
-              <div className="spesa-cat">{item.cat}{item.sottocat ? ` › ${item.sottocat}` : ''}</div>
-            </div>
-          </div>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={draftVal(item, 'qta')} title="Quantità (promemoria, es. 500 = grammi)"
-            onChange={e => setDraftQta(item, e.target.value)}
-            onBlur={() => commitDraft(item)}
-            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-            className="qta-input" />
-          <select value={draftVal(item, 'unita')} title="Unità (solo promemoria, nessun calcolo)" onChange={e => setDraftUnita(item, e.target.value)} className="unita-select">
-            {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
-          </select>
-          <input type="text" inputMode="decimal" placeholder="€ totale" title="Prezzo totale pagato (scritto a mano)" value={draftVal(item, 'prezzoTotale')}
-            onChange={e => setDraftTotale(item, e.target.value)}
-            onBlur={() => commitDraft(item)}
-            onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-            className="prezzo-input tot" />
-          <button
-            className="btn small bp-btn"
-            title={bp ? 'Pagabile con buoni pasto (tocca per togliere)' : 'Segna come pagabile con buoni pasto'}
-            onClick={() => toggleBuonoPasto(item)}
-            style={bp ? {background:'var(--salmon)',borderColor:'var(--salmon)',color:'#fff'} : {}}
-          >🍱</button>
-          <input type="checkbox" checked={item.checked} onChange={() => toggle(item)} title="Preso" />
-          <button className="spesa-delete" onClick={() => del(item)}>✕</button>
-        </div>
-        {quickPriceId === item.id && (
-          <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'10px 12px',marginTop:'-4px',marginBottom:'6px',flexWrap:'wrap'}}>
-            <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 100px'}}>Quanto hai speso per <strong>{item.nome}</strong>?</span>
-            <input
-              ref={quickPriceInputRef}
-              type="text" inputMode="decimal" placeholder="€ totale"
-              value={quickPrice}
-              onChange={e => setQuickPrice(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && confermaQuickPrice(item)}
-              style={{width:'80px',padding:'7px 8px',fontSize:'14px'}}
-            />
-            <button className="btn primary small" onClick={() => confermaQuickPrice(item)}>✓ Preso</button>
-            <button className="btn small" onClick={() => confermaSenzaPrice(item)}>Senza prezzo</button>
-            <button className="btn small" onClick={annullaQuickPrice}>✕ Annulla</button>
-          </div>
-        )}
+      <div key={item.id} className={`ls-item${item.checked ? ' presa' : ''}`}>
+        <button className="ls-check" onClick={() => toggle(item)} aria-label={item.checked ? 'Rimetti da prendere' : 'Segna come preso'}>
+          {item.checked ? '✓' : ''}
+        </button>
+        <span className="ls-nome">{item.nome}</span>
+        <input type="text" className="ls-qta" placeholder="qtà" value={qtaVal(item)}
+          onChange={e => setQtaDrafts(d => ({ ...d, [item.id]: e.target.value }))}
+          onBlur={() => commitQta(item)}
+          onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+        <button className="ls-del" onClick={() => del(item)} aria-label="Elimina">✕</button>
       </div>
     );
   }
 
-  const lista = data.listaSpesa || [];
-  const daPrendere = lista.filter(i => !i.checked);
-  const presi = lista.filter(i => i.checked);
-
-  // Totale corrente degli articoli marcati "buono pasto" (presi + da prendere): serve per
-  // controllare al volo, durante la spesa, di non superare il limite giornaliero dei buoni pasto
-  const itemsBP = lista.filter(i => i.buonoPasto);
-  const totBPLista = itemsBP.reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0);
-  const totBPPresi = presi.filter(i => i.buonoPasto).reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0);
-
-  // Raggruppa per tappa (negozio): l'ordine delle sezioni segue l'ordine delle tappe
-  // definito in Impostazioni, così la lista rispecchia il giro che si vuole fare
-  const bytappa = {};
-  for (const item of daPrendere) {
-    const t = item.tappa || 'Altro';
-    if (!bytappa[t]) bytappa[t] = [];
-    bytappa[t].push(item);
-  }
-  const tappeOrdinate = [
-    ...tappaList.filter(t => bytappa[t]),
-    ...Object.keys(bytappa).filter(t => !tappaList.includes(t)),
-  ];
-  const numTappeRimanenti = tappeOrdinate.length;
-
   return (
     <div className="section active">
       <div className="print-title">💜 Family CC — Lista della spesa</div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
-        <div style={{fontSize:'17px',fontWeight:'700'}}>🛒 Lista della spesa</div>
-        <div style={{display:'flex',gap:'6px'}}>
-          {presi.length > 0 && <button className="btn small danger" onClick={clearChecked}>🗑 Svuota senza registrare</button>}
-          <button className="btn primary small" onClick={() => setShow(v => !v)}>{show ? '✕' : '+ Aggiungi'}</button>
+
+      {tappeGiro.length > 0 && (
+        <div className={`ls-tappe${giroCompleto ? ' completo' : ''}`}>
+          <div className="ls-tappe-head">
+            <span>{giroCompleto ? '✅ Tappe completate' : '📍 Tappe'}</span>
+            <span>{giroCompleto ? `Totale ${formatEuro(totaleGiro)}` : `${numFatte} di ${tappeGiro.length} fatte`}</span>
+          </div>
+          {!giroCompleto && (
+            <div className="ls-chips">
+              {tappeGiro.map(t => (
+                <span key={t} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{t}</span>
+              ))}
+            </div>
+          )}
+          {giroCompleto && totaleBuoniGiro > 0 && (
+            <div className="ls-tappe-sub">di cui 🍱 buoni pasto {formatEuro(totaleBuoniGiro)}</div>
+          )}
+        </div>
+      )}
+
+      <div className="ls-add">
+        <AutocompleteInput
+          className="ls-input"
+          placeholder="Prodotto"
+          value={form.nome}
+          options={prodottiNote}
+          onChange={val => setForm(f => ({ ...f, nome: val }))}
+          onEnter={add}
+        />
+        <div className="ls-add-row">
+          <input type="text" className="ls-input ls-add-qta" placeholder="Qtà" value={form.qta}
+            onChange={e => setForm(f => ({ ...f, qta: e.target.value }))}
+            onKeyDown={e => e.key === 'Enter' && add()} />
+          <select className="ls-input ls-add-negozio" value={form.tappa} onChange={e => setForm(f => ({ ...f, tappa: e.target.value }))}>
+            {tappaList.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button className="btn primary ls-add-btn" onClick={add} aria-label="Aggiungi">＋</button>
         </div>
       </div>
 
-      {numTappeRimanenti > 0 && (
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--accent-light)',border:'1px solid var(--border2)',borderRadius:'10px',padding:'10px 14px',marginBottom:'14px'}}>
-          <span style={{fontSize:'13px',color:'var(--accent-dark)',fontWeight:'600'}}>📍 Tappe rimanenti</span>
-          <span style={{fontSize:'16px',fontWeight:'800',color:'var(--accent-dark)'}}>{numTappeRimanenti}</span>
-        </div>
-      )}
+      {lista.length === 0 && casse.length === 0 && <div className="empty">Lista vuota — scrivi un prodotto qui sopra</div>}
 
-      {itemsBP.length > 0 && (
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--salmon-bg)',border:'1px solid var(--salmon-border)',borderRadius:'10px',padding:'10px 14px',marginBottom:'14px'}}>
-          <span style={{fontSize:'13px',color:'var(--salmon)',fontWeight:'600'}}>🍱 Totale marcato buoni pasto ({itemsBP.length} articol{itemsBP.length === 1 ? 'o' : 'i'})</span>
-          <span style={{fontSize:'16px',fontWeight:'800',color:'var(--salmon)'}}>{formatEuro(totBPLista)}</span>
-        </div>
-      )}
-
-      {show && (
-        <div className="card" style={{background:'var(--accent-light)'}}>
-          {/* Prodotto */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>Prodotto</label>
-              <AutocompleteInput
-                placeholder="Es. Latte"
-                value={form.nome}
-                options={prodottiNote}
-                onChange={val => setForm(f => ({...f, nome: val}))}
-                onEnter={add}
-              />
-            </div>
-          </div>
-          {/* Qtà, Unità (solo promemoria, nessun calcolo), Totale scritto a mano */}
-          <div className="form-row">
-            <div className="form-group" style={{maxWidth:'60px'}}>
-              <label>Qtà</label>
-              <input type="text" inputMode="decimal" value={form.qta} onChange={e => setForm(f => ({...f, qta: e.target.value}))} />
-            </div>
-            <div className="form-group" style={{maxWidth:'70px'}}>
-              <label>Unità</label>
-              <select value={form.unita} onChange={e => setForm(f => ({...f, unita: e.target.value}))}>
-                {UNITA_OPZIONI.map(u => <option key={u.v} value={u.v}>{u.label}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{maxWidth:'85px'}}>
-              <label>€ totale</label>
-              <input type="text" inputMode="decimal" placeholder="0,00" value={form.prezzoTotale} onChange={e => setForm(f => ({...f, prezzoTotale: e.target.value}))} />
-            </div>
-          </div>
-          {/* Categoria */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>Categoria</label>
-              <AutocompleteInput
-                placeholder="Es. Latticini"
-                value={form.cat}
-                options={catList}
-                onChange={val => setForm(f => ({...f, cat: val, sottocat: ''}))}
-                onEnter={add}
-              />
-            </div>
-          </div>
-          {/* Sottocategoria (solo se è stata scelta una categoria) */}
-          {form.cat && (
-            <div className="form-row">
-              <div className="form-group">
-                <label>Sottocategoria <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
-                <select value={form.sottocat} onChange={e => setForm(f => ({...f, sottocat: e.target.value}))}>
-                  <option value="">Nessuna</option>
-                  {sottocatList.map(sc => <option key={sc}>{sc}</option>)}
-                </select>
-                {!showNewSottocat && <button type="button" onClick={() => setShowNewSottocat(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova sottocategoria</button>}
-                {showNewSottocat && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
-                  <input type="text" placeholder="Nome sottocategoria" value={newSottocatInline} onChange={e => setNewSottocatInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addSottocatInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
-                  <button type="button" className="btn primary small" onClick={addSottocatInline}>✓</button>
-                  <button type="button" className="btn small" onClick={() => setShowNewSottocat(false)}>✕</button>
-                </div>}
-              </div>
-            </div>
-          )}
-          {/* Tappa */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>Tappa (negozio)</label>
-              <select required value={form.tappa} onChange={e => { setForm(f => ({...f, tappa: e.target.value})); setShowNewTappa(false); }}>
-                <option value="">Seleziona...</option>
-                {tappaList.map(t => <option key={t}>{t}</option>)}
-              </select>
-              {!showNewTappa && <button type="button" onClick={() => setShowNewTappa(true)} className="btn small" style={{marginTop:'6px',borderColor:'var(--accent)',color:'var(--accent)'}}>+ Nuova tappa</button>}
-              {showNewTappa && <div style={{display:'flex',gap:'4px',marginTop:'4px'}}>
-                <input type="text" placeholder="Nome tappa" value={newTappaInline} onChange={e => setNewTappaInline(e.target.value)} onKeyDown={e => e.key==='Enter' && addTappaInline()} style={{fontSize:'13px',padding:'4px 8px'}} />
-                <button type="button" className="btn primary small" onClick={addTappaInline}>✓</button>
-                <button type="button" className="btn small" onClick={() => setShowNewTappa(false)}>✕</button>
-              </div>}
-            </div>
-          </div>
-          <button className="btn primary" onClick={add}>➕ Aggiungi</button>
-        </div>
-      )}
-
-      {lista.length === 0 && <div className="empty">Lista vuota — aggiungi qualcosa!</div>}
-
-      {tappeOrdinate.map(t => {
-        const posTappa = tappaList.indexOf(t);
+      {tappeGiro.map(t => {
+        const pos = tappaList.indexOf(t);
+        const prodotti = lista.filter(i => (i.tappa || 'Altro') === t);
+        const daPrendere = prodotti.filter(i => !i.checked);
+        const giaPresi = prodotti.filter(i => i.checked);
+        const fatta = tappaFatta(t);
         return (
-        <div key={t} style={{marginBottom:'14px'}}>
-          <div style={{fontSize:'12px',fontWeight:'700',color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'6px',paddingLeft:'4px'}}>📍 {posTappa >= 0 ? `${posTappa + 1}. ` : ''}{t} <span style={{fontWeight:'400',color:'var(--text3)'}}>({bytappa[t].length})</span></div>
-          {bytappa[t].map(item => renderItem(item))}
-        </div>
+          <div key={t} className={`ls-negozio${fatta ? ' fatto' : ''}`}>
+            <div className="ls-negozio-head">
+              <span>{fatta ? '✓ ' : ''}{pos >= 0 ? `${pos + 1}. ` : ''}{t}</span>
+              <span className="ls-negozio-count">
+                {fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso')}
+              </span>
+            </div>
+            {daPrendere.map(renderItem)}
+            {giaPresi.map(renderItem)}
+            <div className="ls-cassa">
+              <label>
+                <span>Cassa €</span>
+                <input type="text" inputMode="decimal" placeholder="0,00" className="ls-input"
+                  value={cassaVal(t, 'totale')}
+                  onChange={e => setCassaDraft(t, 'totale', e.target.value)}
+                  onBlur={() => commitCassa(t)}
+                  onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+              </label>
+              <label>
+                <span>🍱 buoni €</span>
+                <input type="text" inputMode="decimal" placeholder="0,00" className="ls-input"
+                  value={cassaVal(t, 'buoni')}
+                  onChange={e => setCassaDraft(t, 'buoni', e.target.value)}
+                  onBlur={() => commitCassa(t)}
+                  onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+              </label>
+            </div>
+          </div>
         );
       })}
 
-      {daPrendere.length > 0 && (
-        <div style={{textAlign:'right',fontSize:'13px',fontWeight:700,color:'var(--text2)',padding:'2px 4px 12px'}}>
-          Totale da prendere (stima): {formatEuro(daPrendere.reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0))}
-        </div>
+      {casseValide.length > 0 && (
+        <button className="btn primary ls-registra" onClick={registraSpesa}>
+          💾 Registra spesa ({formatEuro(totaleGiro)})
+        </button>
       )}
-
-      {presi.length > 0 && (
-        <div style={{marginTop:'8px'}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
-            <div style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em'}}>✓ Già presi</div>
-            <div style={{fontSize:'13px',fontWeight:700,color:'var(--green)'}}>
-              Totale: {formatEuro(presi.reduce((a, i) => a + (parseNumIT(draftVal(i, 'prezzoTotale')) || 0), 0))}
-              {totBPPresi > 0 && <span style={{color:'var(--salmon)',fontWeight:600}}> (di cui 🍱 {formatEuro(totBPPresi)})</span>}
-            </div>
-          </div>
-          {presi.map(item => renderItem(item))}
-          <button className="btn primary" style={{marginTop:'10px',width:'100%',background:'var(--green)',borderColor:'var(--green)'}} onClick={registraSpesa}>
-            💾 Registra spesa{totBPPresi > 0 ? ' (Budget + Buoni Pasto)' : ' nel Budget'} e svuota lista
-          </button>
-        </div>
+      {(presi.length > 0 || casse.length > 0) && (
+        <button className="btn small danger" style={{width:'100%',marginTop:'10px'}} onClick={svuotaSenzaRegistrare}>
+          🗑 Svuota presi e casse senza registrare
+        </button>
       )}
     </div>
   );
@@ -2755,6 +2595,14 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
     saveData({ tappeLista: [...(data.tappeLista || DEFAULT_TAPPE), newTappa.trim()] });
     setNewTappa('');
   }
+  // Categoria Budget di ogni negozio (v54): dove finisce lo scontrino con "Registra spesa"
+  function catBudgetNegozio(t) {
+    const mappa = data.tappeCategorieBudget || {};
+    return mappa[t] || categoriaBudgetDefault(t, data.categorie || DEFAULT_CATS);
+  }
+  function setCatBudgetNegozio(t, cat) {
+    saveData({ tappeCategorieBudget: { ...(data.tappeCategorieBudget || {}), [t]: cat } });
+  }
   function delTappa(t) {
     saveData({ tappeLista: (data.tappeLista || DEFAULT_TAPPE).filter(x => x !== t) });
   }
@@ -2801,20 +2649,6 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
         </div>
 
         <div className="setting-section" style={{marginTop:'20px'}}>
-          <div className="setting-label">Categorie per la Lista della Spesa</div>
-          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>
-            Categorie usate nella Lista della spesa (es. Frutta e Verdura, Latticini...) per classificare il tipo di prodotto alimentare. Sono diverse dalle "Categorie Spese Budget" qui sopra, che invece servono al Budget familiare.
-          </div>
-          <div>{(data.categorieLista || DEFAULT_SPESA_CATS).map(c => (
-            <span className="cat-chip" key={c}>{c}<button onClick={() => delCatSpesa(c)}>✕</button></span>
-          ))}</div>
-          <div className="form-row" style={{marginTop:'10px'}}>
-            <input type="text" placeholder="Nuova categoria..." value={newCatSpesa} onChange={e => setNewCatSpesa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCatSpesa()} style={{flex:1}} />
-            <button className="btn primary" onClick={addCatSpesa}>Aggiungi</button>
-          </div>
-        </div>
-
-        <div className="setting-section" style={{marginTop:'20px'}}>
           <div className="setting-label">Database Prodotti</div>
           <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>
             Elenco dei prodotti già scritti nella Lista della spesa: quando digiti un prodotto nuovo lì, si aggiunge qui da solo; da qui puoi anche ripulire refusi o aggiungerne uno in anticipo. Questo elenco è quello usato per i suggerimenti del campo "Prodotto".
@@ -2830,8 +2664,8 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
         </div>
 
         <div className="setting-section" style={{marginTop:'20px'}}>
-          <div className="setting-label">Tappe (negozi) lista spesa</div>
-          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>L'ordine qui sotto è quello del tuo giro di spesa: la prima tappa dell'elenco è quella da fare per prima. Scrivi il numero di posizione per spostare una tappa.</div>
+          <div className="setting-label">Negozi del giro spesa</div>
+          <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'8px'}}>L'ordine qui sotto è quello del tuo giro di spesa: il primo negozio è quello da fare per primo (scrivi il numero per spostarlo). Accanto a ogni negozio scegli in quale categoria del Budget finisce il suo scontrino quando premi "Registra spesa".</div>
           <div>{(data.tappeLista || DEFAULT_TAPPE).map((t, idx, arr) => (
             <div key={t} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'8px 10px',marginBottom:'6px'}}>
               <input
@@ -2846,12 +2680,15 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
                 style={{width:'44px',padding:'6px 4px',fontSize:'13px',textAlign:'center',flexShrink:0}}
                 title="Posizione nel giro di spesa"
               />
-              <span style={{flex:1,fontSize:'14px'}}>{t}</span>
-              <button className="btn small danger" onClick={() => delTappa(t)} title="Elimina tappa">✕</button>
+              <span style={{flex:1,fontSize:'15px',minWidth:0,overflowWrap:'anywhere'}}>{t}</span>
+              <select value={catBudgetNegozio(t)} onChange={e => setCatBudgetNegozio(t, e.target.value)} title="Categoria Budget" style={{width:'112px',flexShrink:0,fontSize:'16px',padding:'6px 4px'}}>
+                {(data.categorie || DEFAULT_CATS).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button className="btn small danger" onClick={() => delTappa(t)} title="Elimina negozio">✕</button>
             </div>
           ))}</div>
           <div className="form-row" style={{marginTop:'10px'}}>
-            <input type="text" placeholder="Nuova tappa..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
+            <input type="text" placeholder="Nuovo negozio..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
             <button className="btn primary" onClick={addTappa}>Aggiungi</button>
           </div>
         </div>
