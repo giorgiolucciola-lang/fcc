@@ -396,7 +396,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v55";
+const APP_VERSION = "v56";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2141,7 +2141,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           {!giroCompleto && (
             <div className="ls-chips">
               {tappeGiro.map(t => (
-                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{t}</button>
+                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{tappaList.indexOf(t) >= 0 ? `${tappaList.indexOf(t) + 1}. ` : ''}{t}</button>
               ))}
             </div>
           )}
@@ -2660,20 +2660,32 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
   // l'ORDINE di questo elenco è quello che la Lista della spesa usa per raggruppare
   // gli articoli (prima tappa dell'elenco = prima da fare), quindi cambiare qui il
   // numero di posizione di una tappa equivale a spostarla nel percorso del giro di spesa.
-  // Bozza locale mentre si digita (stesso pattern usato per i prezzi nella Lista della
-  // spesa): il riordino vero e proprio avviene solo su blur/Invio, non ad ogni cifra.
+  // Bozza locale mentre si digita: il riordino vero e proprio avviene su blur/Invio
+  // oppure (v56) da solo 1 secondo dopo l'ultima cifra, e comunque se si lascia la
+  // schermata Impostazioni. Prima, uscendo da Impostazioni senza "chiudere" il campo,
+  // il numero restava solo a video e non veniva salvato: per questo l'ordine della
+  // barra gialla Tappe poteva non corrispondere a quello visto qui.
   const [tappaPosDrafts, setTappaPosDrafts] = useState({});
+  const tappaPosTimers = useRef({});
+  const tappaPosRef = useRef({ drafts: {}, commit: null });
   function tappaPosVal(t, idx) {
     return tappaPosDrafts[t] !== undefined ? tappaPosDrafts[t] : String(idx + 1);
   }
   function setTappaPosDraft(t, val) {
     setTappaPosDrafts(d => ({ ...d, [t]: val }));
+    clearTimeout(tappaPosTimers.current[t]);
+    tappaPosTimers.current[t] = setTimeout(() => {
+      if (tappaPosRef.current.commit) tappaPosRef.current.commit(t);
+    }, 1000);
   }
-  function commitTappaPos(t, idx) {
-    const lista = [...(data.tappeLista || DEFAULT_TAPPE)];
-    const raw = tappaPosDrafts[t];
+  function commitTappaPos(t) {
+    clearTimeout(tappaPosTimers.current[t]);
+    const raw = tappaPosRef.current.drafts[t];
     setTappaPosDrafts(d => { const p = { ...d }; delete p[t]; return p; });
     if (raw === undefined) return;
+    const lista = [...(data.tappeLista || DEFAULT_TAPPE)];
+    const idx = lista.indexOf(t);
+    if (idx < 0) return;
     let nuovaPos = parseInt(raw, 10);
     if (isNaN(nuovaPos)) return;
     nuovaPos = Math.max(1, Math.min(lista.length, nuovaPos));
@@ -2683,6 +2695,14 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
     lista.splice(targetIdx, 0, item);
     saveData({ tappeLista: lista });
   }
+  tappaPosRef.current.drafts = tappaPosDrafts;
+  tappaPosRef.current.commit = commitTappaPos;
+  // Uscendo da Impostazioni: salva subito l'eventuale numero rimasto in sospeso
+  useEffect(() => () => {
+    Object.values(tappaPosTimers.current).forEach(clearTimeout);
+    const r = tappaPosRef.current;
+    Object.keys(r.drafts).forEach(t => r.commit && r.commit(t));
+  }, []);
 
   return (
     <div className="section active">
@@ -2725,7 +2745,7 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
                 inputMode="numeric"
                 value={tappaPosVal(t, idx)}
                 onChange={e => setTappaPosDraft(t, e.target.value)}
-                onBlur={() => commitTappaPos(t, idx)}
+                onBlur={() => commitTappaPos(t)}
                 onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                 style={{width:'44px',padding:'6px 4px',fontSize:'13px',textAlign:'center',flexShrink:0}}
                 title="Posizione nel giro di spesa"
