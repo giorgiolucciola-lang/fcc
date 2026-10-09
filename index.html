@@ -396,7 +396,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v57";
+const APP_VERSION = "v58";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2035,8 +2035,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     setCassaDrafts(prev => { const p = { ...prev }; delete p[t]; return p; });
     if (!d) return;
     const vecchia = cassaDi(t);
-    const totale = parseNumIT(d.totale !== undefined ? d.totale : (vecchia ? String(vecchia.totale) : '')) || 0;
+    let totale = parseNumIT(d.totale !== undefined ? d.totale : (vecchia ? String(vecchia.totale) : '')) || 0;
     const buoni = parseNumIT(d.buoni !== undefined ? d.buoni : (vecchia ? String(vecchia.buoni || '') : '')) || 0;
+    // v58: spesa pagata tutta con i buoni → se la cassa è vuota si riempie con lo stesso importo
+    if (totale <= 0 && buoni > 0) totale = buoni;
     const nuova = { id: vecchia ? vecchia.id : Date.now(), tappa: t, totale: Math.round(totale * 100) / 100, buoni: Math.round(buoni * 100) / 100 };
     if (vecchia && vecchia.totale === nuova.totale && (vecchia.buoni || 0) === nuova.buoni) return;
     if (vecchia && totale <= 0 && buoni <= 0) {
