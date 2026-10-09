@@ -396,7 +396,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v56";
+const APP_VERSION = "v57";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2063,6 +2063,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     ...tappaList.filter(t => negoziUsati.has(t)),
     ...Array.from(negoziUsati).filter(t => !tappaList.includes(t)),
   ];
+  // v57: le tappe di oggi sono numerate in modo consecutivo (1, 2, 3…) seguendo l'ordine
+  // di Impostazioni, saltando i negozi senza prodotti.
   const tappaFatta = t => { const c = cassaDi(t); return !!(c && c.totale > 0); };
   const numFatte = tappeGiro.filter(tappaFatta).length;
   const giroCompleto = tappeGiro.length > 0 && numFatte === tappeGiro.length;
@@ -2140,8 +2142,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           </div>
           {!giroCompleto && (
             <div className="ls-chips">
-              {tappeGiro.map(t => (
-                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{tappaList.indexOf(t) >= 0 ? `${tappaList.indexOf(t) + 1}. ` : ''}{t}</button>
+              {tappeGiro.map((t, n) => (
+                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{n + 1}. {t}</button>
               ))}
             </div>
           )}
@@ -2183,7 +2185,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         return (
           <div key={t} id={'negozio-' + t} className={`ls-negozio${fatta ? ' fatto' : ''}`}>
             <div className="ls-negozio-head">
-              <span>{fatta ? '✓ ' : ''}{pos >= 0 ? `${pos + 1}. ` : ''}{t}</span>
+              <span>{fatta ? '✓ ' : ''}{tappeGiro.indexOf(t) + 1}. {t}</span>
               <span className="ls-negozio-count">
                 {fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso')}
               </span>
