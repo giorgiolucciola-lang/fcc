@@ -262,7 +262,7 @@ select:required:valid:not(:focus) {
 .ls-tappe.completo .ls-tappe-head { color: #0e7a3d; }
 .ls-tappe-sub { font-size: 14px; color: #0e7a3d; margin-top: 4px; }
 .ls-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.ls-chip { font-size: 15px; padding: 4px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--giallo-border); color: var(--text); }
+.ls-chip { font-family: inherit; cursor: pointer; font-size: 15px; padding: 6px 12px; border-radius: 8px; background: #fff; border: 1px solid var(--giallo-border); color: var(--text); }
 .ls-chip.fatta { background: var(--green-bg); border-color: var(--green-border); color: #0e7a3d; font-weight: 600; }
 .ls-add { background: var(--accent-light); border: 1px solid var(--border2); border-radius: 12px; padding: 10px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
 .ls-add-row { display: flex; gap: 8px; }
@@ -270,7 +270,8 @@ select:required:valid:not(:focus) {
 .ls-add-qta { width: 90px !important; flex-shrink: 0; }
 .ls-add-negozio { flex: 1; min-width: 0; }
 .ls-add-btn { font-size: 24px; padding: 0 16px; min-width: 52px; line-height: 1; }
-.ls-negozio { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px 12px 10px; margin-bottom: 12px; }
+.ls-orfano { background: var(--orange-bg); border-radius: 8px; padding: 8px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--text2); }
+.ls-negozio { scroll-margin-top: 110px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px 12px 10px; margin-bottom: 12px; }
 .ls-negozio.fatto { border-color: var(--green-border); background: #fbfefc; }
 .ls-negozio-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: var(--accent-dark); padding: 10px 0 6px; border-bottom: 1px solid var(--border); }
 .ls-negozio.fatto .ls-negozio-head { color: #0e7a3d; }
@@ -395,7 +396,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v54";
+const APP_VERSION = "v55";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -603,7 +604,13 @@ const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'P
 // Tappe (negozi) del giro spesa: servono a sapere quante "fermate" restano da fare
 // (es. Supermercato, Fruttivendolo, Farmacia...). Concetto separato dalla categoria
 // del prodotto: la categoria dice COSA è, la tappa dice DOVE si compra.
-const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia', 'Altro'];
+const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia'];
+// Nomi prodotto uniformi (v55): iPhone mette la maiuscola iniziale, il Mac no. Qui si
+// normalizza sempre: prima lettera maiuscola, il resto come scritto.
+function nomeProdotto(s) {
+  const t = (s || '').trim().replace(/\s+/g, ' ');
+  return t ? t.charAt(0).toLocaleUpperCase('it') + t.slice(1) : '';
+}
 // Categoria Budget proposta per un negozio, se non è stata scelta in Impostazioni (v54):
 // alimentari → Cibo, farmacia → Salute, tutto il resto → Altro (solo se la categoria esiste).
 function categoriaBudgetDefault(negozio, categorieBudget) {
@@ -1828,7 +1835,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
 // i suggerimenti mentre si scrive). Mostra un piccolo menu sotto il campo che si
 // filtra in tempo reale in base a quello che si sta digitando, restando visibile
 // finché non si sceglie un suggerimento o non si tocca/clicca altrove.
-function AutocompleteInput({ value, onChange, options, placeholder, onEnter, className }) {
+function AutocompleteInput({ value, onChange, options, placeholder, onEnter, className, autoCapitalize }) {
   const [open, setOpen] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const wrapRef = useRef(null);
@@ -1899,6 +1906,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
         placeholder={placeholder}
         value={value}
         autoComplete="off"
+        autoCapitalize={autoCapitalize}
         onChange={e => { onChange(e.target.value); setOpen(true); setHighlightIdx(-1); }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
@@ -1939,26 +1947,41 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // alla cassa di ogni negozio, con l'eventuale parte pagata in buoni pasto.
   // "Negozio" e "tappa" sono la stessa cosa: l'elenco (e l'ordine del giro) è quello
   // di Impostazioni → Negozi del giro spesa.
-  const tappaList = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
+  const tappaListSalvata = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
+  // "Altro" era una tappa di riserva delle versioni precedenti: non è un negozio vero,
+  // quindi non si propone più e viene tolta una volta sola anche dai dati salvati (v55).
+  const tappaList = tappaListSalvata.filter(t => t !== 'Altro').length ? tappaListSalvata.filter(t => t !== 'Altro') : DEFAULT_TAPPE;
+  useEffect(() => {
+    if ((data.tappeLista || []).includes('Altro')) {
+      applyUpdate({ tappeLista: firebase.firestore.FieldValue.arrayRemove('Altro') });
+    }
+  }, [data.tappeLista]);
   const ultimoNegozio = (() => { try { return localStorage.getItem('fcc-ultimo-negozio') || ''; } catch (e) { return ''; } })();
   const [form, setForm] = useState({ nome: '', qta: '', tappa: tappaList.includes(ultimoNegozio) ? ultimoNegozio : tappaList[0] });
   // Bozze locali per i campi cassa (si salvano su Firebase solo all'uscita dal campo)
   const [cassaDrafts, setCassaDrafts] = useState({});
   const [qtaDrafts, setQtaDrafts] = useState({});
 
-  const prodottiNote = Array.from(new Set([...(data.storicoProdotti || []), ...((data.listaSpesa || []).map(i => i.nome))].filter(Boolean)));
+  const prodottiNote = (() => {
+    const visti = new Map();
+    for (const n of [...(data.storicoProdotti || []), ...((data.listaSpesa || []).map(i => i.nome))]) {
+      const nn = nomeProdotto(n);
+      if (nn && !visti.has(nn.toLowerCase())) visti.set(nn.toLowerCase(), nn);
+    }
+    return Array.from(visti.values()).sort((a, b) => a.localeCompare(b, 'it'));
+  })();
   const lista = data.listaSpesa || [];
   const casse = data.casseSpesa || [];
 
   function cassaDi(t) { return casse.find(c => c.tappa === t); }
 
   function add() {
-    const nomeTrim = form.nome.trim();
+    const nomeTrim = nomeProdotto(form.nome);
     if (!nomeTrim) return;
-    const tappa = form.tappa || tappaList[0] || 'Altro';
+    const tappa = tappaList.includes(form.tappa) ? form.tappa : tappaList[0];
     const item = { id: Date.now(), nome: nomeTrim, qta: form.qta.trim(), tappa, checked: false };
     addItems('listaSpesa', [item]);
-    if (!(data.storicoProdotti || []).includes(nomeTrim)) addItems('storicoProdotti', [nomeTrim]);
+    if (!(data.storicoProdotti || []).some(n => (n || '').toLowerCase() === nomeTrim.toLowerCase())) addItems('storicoProdotti', [nomeTrim]);
     try { localStorage.setItem('fcc-ultimo-negozio', tappa); } catch (e) {}
     setForm(f => ({ nome: '', qta: '', tappa: f.tappa }));
   }
@@ -1970,8 +1993,25 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (!ok) return;
     removeItems('listaSpesa', [item]);
   }
+  // Prodotti rimasti su un negozio che non è (più) nell'elenco di Impostazioni, ad es. il
+  // vecchio "Altro": si spostano tutti insieme su un negozio vero con un solo tocco.
+  function spostaNegozio(daNegozio, aNegozio) {
+    if (!aNegozio) return;
+    const daSpostare = lista.filter(i => (i.tappa || 'Altro') === daNegozio);
+    if (!daSpostare.length) return;
+    const spostati = daSpostare.map(i => ({ ...i, tappa: aNegozio }));
+    const vecchiaCassa = cassaDi(daNegozio);
+    applyUpdate({ listaSpesa: firebase.firestore.FieldValue.arrayRemove(...daSpostare) })
+      .then(() => applyUpdate({ listaSpesa: firebase.firestore.FieldValue.arrayUnion(...spostati) }));
+    if (vecchiaCassa) applyUpdate({ casseSpesa: firebase.firestore.FieldValue.arrayRemove(vecchiaCassa) });
+  }
+  // Tocco su una tappa in alto → scorre direttamente ai prodotti di quel negozio
+  function vaiANegozio(t) {
+    const el = document.getElementById('negozio-' + t);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   function qtaVal(item) {
-    return qtaDrafts[item.id] !== undefined ? qtaDrafts[item.id] : (item.qta === '1' ? '' : (item.qta || ''));
+    return qtaDrafts[item.id] !== undefined ? qtaDrafts[item.id] : (item.qta || '');
   }
   function commitQta(item) {
     const v = qtaDrafts[item.id];
@@ -2078,8 +2118,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         <button className="ls-check" onClick={() => toggle(item)} aria-label={item.checked ? 'Rimetti da prendere' : 'Segna come preso'}>
           {item.checked ? '✓' : ''}
         </button>
-        <span className="ls-nome">{item.nome}</span>
-        <input type="text" className="ls-qta" placeholder="qtà" value={qtaVal(item)}
+        <span className="ls-nome">{nomeProdotto(item.nome)}</span>
+        <input type="text" className="ls-qta" placeholder="–" value={qtaVal(item)}
           onChange={e => setQtaDrafts(d => ({ ...d, [item.id]: e.target.value }))}
           onBlur={() => commitQta(item)}
           onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
@@ -2101,7 +2141,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           {!giroCompleto && (
             <div className="ls-chips">
               {tappeGiro.map(t => (
-                <span key={t} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{t}</span>
+                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{t}</button>
               ))}
             </div>
           )}
@@ -2114,6 +2154,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       <div className="ls-add">
         <AutocompleteInput
           className="ls-input"
+          autoCapitalize="sentences"
           placeholder="Prodotto"
           value={form.nome}
           options={prodottiNote}
@@ -2140,13 +2181,22 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         const giaPresi = prodotti.filter(i => i.checked);
         const fatta = tappaFatta(t);
         return (
-          <div key={t} className={`ls-negozio${fatta ? ' fatto' : ''}`}>
+          <div key={t} id={'negozio-' + t} className={`ls-negozio${fatta ? ' fatto' : ''}`}>
             <div className="ls-negozio-head">
               <span>{fatta ? '✓ ' : ''}{pos >= 0 ? `${pos + 1}. ` : ''}{t}</span>
               <span className="ls-negozio-count">
                 {fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso')}
               </span>
             </div>
+            {pos < 0 && (
+              <div className="ls-orfano">
+                <span>Negozio non presente in Impostazioni. Sposta questi prodotti in:</span>
+                <select className="ls-input" value="" onChange={e => spostaNegozio(t, e.target.value)}>
+                  <option value="">Scegli negozio…</option>
+                  {tappaList.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            )}
             {daPrendere.map(renderItem)}
             {giaPresi.map(renderItem)}
             <div className="ls-cassa">
