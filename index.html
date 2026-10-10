@@ -281,6 +281,14 @@ select:required:valid:not(:focus) {
 .ls-check { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; border: 2px solid var(--border2); background: #fff; color: #fff; font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer; padding: 0; }
 .ls-item.presa .ls-check { background: var(--green); border-color: var(--green); }
 .ls-nome { flex: 1; min-width: 0; font-size: 18px; color: var(--text); overflow-wrap: anywhere; }
+.ls-nome-btn { background: none; border: none; padding: 4px 0; text-align: left; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ls-sposta { display: flex; align-items: center; gap: 8px; background: var(--accent-light); border: 1px solid var(--border2); border-radius: 8px; padding: 8px 10px; margin: 4px 0 6px; }
+.ls-sposta select { flex: 1; min-width: 0; }
+.ls-sposta-label { font-size: 14px; color: var(--text2); white-space: nowrap; }
+.ls-sugg { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ls-chip { font-size: 15px; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border2); background: var(--surface); color: var(--text); font-family: inherit; }
+.ls-chip.attivo { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.ls-nuovo-neg { border: 2px solid var(--accent) !important; }
 .ls-item.presa .ls-nome { color: var(--text3); text-decoration: line-through; }
 input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding: 7px 6px; text-align: center; color: var(--text2); background: var(--surface2); border-color: var(--border); }
 .ls-del { background: none; border: none; color: var(--text3); font-size: 18px; padding: 8px 2px 8px 6px; cursor: pointer; flex-shrink: 0; }
@@ -396,7 +404,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v59";
+const APP_VERSION = "v60";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -489,6 +497,17 @@ function parseNumIT(v) {
   const s = String(v).trim().replace(',', '.');
   if (s === '') return NaN;
   return parseFloat(s);
+}
+// v60: importi scritti col tastierino italiano ("12,50"). Converte in numero (0 se vuoto/non valido)
+function importoIT(v) {
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  const n = parseNumIT(String(v || '').replace(/\./g, (m, i, str) => str.includes(',') ? '' : m));
+  return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+}
+// v60: numero salvato → testo per il campo, con la virgola ("12.5" → "12,5")
+function numPerCampo(n) {
+  if (n === null || n === undefined || n === '') return '';
+  return String(n).replace('.', ',');
 }
 function monthLabel(y, m) {
   return new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
@@ -737,6 +756,17 @@ function App() {
     if (!items || !items.length) return Promise.resolve();
     return applyUpdate({ [field]: firebase.firestore.FieldValue.arrayRemove(...items) });
   }
+  // v60: aggiorna UNA sola voce di una mappa salvata (es. prodottiNegozi["pane"]) senza
+  // riscrivere tutto il documento: niente rischio di cancellare modifiche fatte altrove.
+  async function aggiornaVoceMappa(campo, chiave, valore) {
+    if (!user || !chiave) return;
+    setSyncing(true);
+    try {
+      await db.collection('users').doc(user.uid).update(new firebase.firestore.FieldPath(campo, chiave), valore);
+    } finally {
+      setSyncing(false);
+    }
+  }
   // v59: togli + rimetti la voce in UN solo salvataggio (batch). Prima erano due
   // salvataggi separati: tra l'uno e l'altro l'app vedeva per un attimo la voce
   // sparita e poi ricomparsa (sull'iPhone gli ultimi "già presi" lampeggiavano).
@@ -807,7 +837,7 @@ function App() {
 
       {tab === 'budget' && <BudgetTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
       {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
-      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} askConfirm={askConfirm} />}
+      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} aggiornaVoceMappa={aggiornaVoceMappa} askConfirm={askConfirm} />}
       {tab === 'report' && <ReportTab data={data} addItems={addItems} removeItems={removeItems} askConfirm={askConfirm} />}
       {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} applyUpdate={applyUpdate} />}
 
@@ -935,7 +965,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
 
   function addSpesa() {
     if (!form.desc || !form.amount) return;
-    const s = { id: Date.now(), desc: form.desc, amount: Number(form.amount), cat: form.cat || 'Altro', subcat: form.subcat || '', date: form.date };
+    const s = { id: Date.now(), desc: form.desc, amount: importoIT(form.amount), cat: form.cat || 'Altro', subcat: form.subcat || '', date: form.date };
     addItems('spese', [s]);
     setForm({ desc: '', amount: '', cat: '', subcat: '', date: localDateStr() });
     setShowAddSpesa(false);
@@ -947,20 +977,20 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
   }
   function startEditSpesa(s) {
     setEditSpesaId(s.id);
-    setEditSpesaForm({ desc: s.desc, amount: s.amount, cat: s.cat || '', subcat: s.subcat || '', date: s.date });
+    setEditSpesaForm({ desc: s.desc, amount: numPerCampo(s.amount), cat: s.cat || '', subcat: s.subcat || '', date: s.date });
   }
   function cancelEditSpesa() {
     setEditSpesaId(null);
   }
   function saveEditSpesa(oldItem) {
     if (!editSpesaForm.desc || !editSpesaForm.amount) return;
-    const newItem = { ...oldItem, desc: editSpesaForm.desc, amount: Number(editSpesaForm.amount), cat: editSpesaForm.cat || 'Altro', subcat: editSpesaForm.subcat || '', date: editSpesaForm.date };
+    const newItem = { ...oldItem, desc: editSpesaForm.desc, amount: importoIT(editSpesaForm.amount), cat: editSpesaForm.cat || 'Altro', subcat: editSpesaForm.subcat || '', date: editSpesaForm.date };
     updateItem('spese', oldItem, newItem);
     setEditSpesaId(null);
   }
   function addEntrata() {
     if (!formE.desc || !formE.amount) return;
-    const e = { id: Date.now(), desc: formE.desc, amount: Number(formE.amount), date: formE.date };
+    const e = { id: Date.now(), desc: formE.desc, amount: importoIT(formE.amount), date: formE.date };
     addItems('entrate', [e]);
     setFormE({ desc: '', amount: '', date: localDateStr() });
     setShowAddEntrata(false);
@@ -1021,7 +1051,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
               </div>
               <div className="form-group">
                 <label>Importo €</label>
-                <input type="number" placeholder="0.00" value={formE.amount} onChange={e => setFormE(f => ({...f, amount: e.target.value}))} />
+                <input type="text" inputMode="decimal" placeholder="0,00" value={formE.amount} onChange={e => setFormE(f => ({...f, amount: e.target.value}))} />
               </div>
             </div>
             <div className="form-row">
@@ -1065,7 +1095,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
               </div>
               <div className="form-group">
                 <label>Importo €</label>
-                <input type="number" placeholder="0.00" step="0.01" min="0" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} />
+                <input type="text" inputMode="decimal" placeholder="0,00" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} />
               </div>
             </div>
             <div className="form-row">
@@ -1138,7 +1168,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
                       </div>
                       <div className="form-group">
                         <label>Importo €</label>
-                        <input type="number" step="0.01" min="0" placeholder="0.00" value={editSpesaForm.amount} onChange={e => setEditSpesaForm(f => ({...f, amount: e.target.value}))} />
+                        <input type="text" inputMode="decimal" placeholder="0,00" value={editSpesaForm.amount} onChange={e => setEditSpesaForm(f => ({...f, amount: e.target.value}))} />
                       </div>
                     </div>
                     <div className="form-row">
@@ -1241,7 +1271,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     const base = {
       id: baseId,
       nome: form.nome,
-      amount: Number(form.amount),
+      amount: importoIT(form.amount),
       date: dataIniziale,
       pagato: false,
       ricorrente,
@@ -1322,7 +1352,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     setEditId(s.id);
     setEditForm({
       nome: s.nome,
-      amount: s.amount || '',
+      amount: numPerCampo(s.amount || ''),
       date: s.date,
       dataPagamento: s.dataPagamento || '',
       tipo: s.ricorrente ? 'ricorrente' : 'singola',
@@ -1357,7 +1387,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
         const nuovaSingola = {
           id: Date.now(),
           nome: editForm.nome,
-          amount: Number(editForm.amount),
+          amount: importoIT(editForm.amount),
           date: editForm.date,
           pagato: false,
           ricorrente: false,
@@ -1382,7 +1412,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
         const nuovaBase = {
           id: Date.now(),
           nome: editForm.nome,
-          amount: Number(editForm.amount),
+          amount: importoIT(editForm.amount),
           date: dataIniziale,
           pagato: false,
           ricorrente: true,
@@ -1405,7 +1435,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       const newItem = {
         ...s,
         nome: editForm.nome,
-        amount: Number(editForm.amount),
+        amount: importoIT(editForm.amount),
         date: editForm.date,
         rataNum: rataNumCorretto,
         numerata: editForm.rataNum !== '' ? true : s.numerata,
@@ -1593,7 +1623,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
             </div>
             <div className="form-group">
               <label>Importo €</label>
-              <input type="number" placeholder="0.00" step="0.01" min="0" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} />
+              <input type="text" inputMode="decimal" placeholder="0,00" value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} />
             </div>
           </div>
           <div className="form-row">
@@ -1614,7 +1644,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
           <div className="form-row">
             <div className="form-group" style={{maxWidth:'220px'}}>
               <label>Giorni di tolleranza <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
-              <input type="number" min="0" placeholder="0" value={form.tolleranza} onChange={e => setForm(f => ({...f, tolleranza: e.target.value}))} />
+              <input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={form.tolleranza} onChange={e => setForm(f => ({...f, tolleranza: e.target.value}))} />
             </div>
           </div>
           <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'10px',marginTop:'-6px'}}>
@@ -1625,7 +1655,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               <div className="form-row">
                 <div className="form-group" style={{maxWidth:'110px'}}>
                   <label>Ogni</label>
-                  <input type="number" min="1" value={form.intervallo} onChange={e => setForm(f => ({...f, intervallo: e.target.value}))} />
+                  <input type="text" inputMode="numeric" pattern="[0-9]*" value={form.intervallo} onChange={e => setForm(f => ({...f, intervallo: e.target.value}))} />
                 </div>
                 <div className="form-group">
                   <label>Unità</label>
@@ -1744,7 +1774,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                 </div>
                 <div className="form-group">
                   <label>Importo €</label>
-                  <input type="number" step="0.01" min="0" placeholder="0.00" value={editForm.amount} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))} />
+                  <input type="text" inputMode="decimal" placeholder="0,00" value={editForm.amount} onChange={e => setEditForm(f => ({...f, amount: e.target.value}))} />
                 </div>
               </div>
               <div className="form-row">
@@ -1763,14 +1793,14 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                 <div className="form-row">
                   <div className="form-group" style={{maxWidth:'150px'}}>
                     <label>Numero rata <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
-                    <input type="number" min="1" placeholder="Es. 13" value={editForm.rataNum} onChange={e => setEditForm(f => ({...f, rataNum: e.target.value}))} />
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="Es. 13" value={editForm.rataNum} onChange={e => setEditForm(f => ({...f, rataNum: e.target.value}))} />
                   </div>
                 </div>
               )}
               <div className="form-row">
                 <div className="form-group" style={{maxWidth:'220px'}}>
                   <label>Giorni di tolleranza <span style={{fontWeight:'400',color:'var(--text3)'}}>(opzionale)</span></label>
-                  <input type="number" min="0" placeholder="0" value={editForm.tolleranza} onChange={e => setEditForm(f => ({...f, tolleranza: e.target.value}))} />
+                  <input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={editForm.tolleranza} onChange={e => setEditForm(f => ({...f, tolleranza: e.target.value}))} />
                 </div>
               </div>
               {s.ricorrente && (
@@ -1803,7 +1833,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                       <div className="form-row">
                         <div className="form-group" style={{maxWidth:'110px'}}>
                           <label>Ogni</label>
-                          <input type="number" min="1" value={editForm.intervallo} onChange={e => setEditForm(f => ({...f, intervallo: e.target.value}))} />
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={editForm.intervallo} onChange={e => setEditForm(f => ({...f, intervallo: e.target.value}))} />
                         </div>
                         <div className="form-group">
                           <label>Unità</label>
@@ -1951,7 +1981,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
 }
 
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
-function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, askConfirm }) {
+function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, aggiornaVoceMappa, askConfirm }) {
   // ── LISTA DELLA SPESA COMPATTA (v54) ─────────────────────────────────────────
   // Pensata per l'uso in negozio con una mano sola: per ogni prodotto servono solo
   // nome, quantità (testo libero: "2", "2 etti", "1 kg") e negozio. Il prezzo NON si
@@ -1973,6 +2003,30 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // Bozze locali per i campi cassa (si salvano su Firebase solo all'uscita dal campo)
   const [cassaDrafts, setCassaDrafts] = useState({});
   const [qtaDrafts, setQtaDrafts] = useState({});
+  // v60: "➕ Nuovo negozio…" direttamente dal riquadro di aggiunta
+  const [nuovoNeg, setNuovoNeg] = useState(false);
+  const [nuovoNegNome, setNuovoNegNome] = useState('');
+  const [avvisoNeg, setAvvisoNeg] = useState('');
+  // v60: prodotto di cui è aperto il menu "Sposta in…"
+  const [spostaId, setSpostaId] = useState(null);
+
+  // v60: negozi in cui è stato messo ogni prodotto (il più recente per primo), salvati su
+  // Firebase in prodottiNegozi. Se un prodotto non è ancora lì, si guarda la lista attuale.
+  const prodottiNegozi = data.prodottiNegozi || {};
+  function negoziDelProdotto(nome) {
+    const k = nomeProdotto(nome).toLowerCase();
+    if (!k) return [];
+    let arr = prodottiNegozi[k] || [];
+    if (!arr.length) arr = (data.listaSpesa || []).filter(i => nomeProdotto(i.nome).toLowerCase() === k).map(i => i.tappa);
+    return [...new Set(arr)].filter(t => tappaList.includes(t));
+  }
+  function ricordaNegozio(nome, tappa) {
+    const k = nomeProdotto(nome).toLowerCase();
+    if (!k || !tappa) return;
+    const prev = prodottiNegozi[k] || [];
+    if (prev[0] === tappa) return;
+    aggiornaVoceMappa('prodottiNegozi', k, [tappa, ...prev.filter(t => t !== tappa)].slice(0, 6));
+  }
 
   const prodottiNote = (() => {
     const visti = new Map();
@@ -1990,12 +2044,41 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function add() {
     const nomeTrim = nomeProdotto(form.nome);
     if (!nomeTrim) return;
-    const tappa = tappaList.includes(form.tappa) ? form.tappa : tappaList[0];
+    let tappa;
+    if (nuovoNeg) {
+      // v60: negozio nuovo scritto qui. Se esiste già (anche con maiuscole diverse) si usa
+      // quello, così non nascono doppioni; altrimenti si aggiunge anche in Impostazioni.
+      const nn = nuovoNegNome.trim().replace(/\s+/g, ' ');
+      if (!nn) { setAvvisoNeg('Scrivi il nome del nuovo negozio'); return; }
+      const esistente = tappaList.find(t => t.toLowerCase() === nn.toLowerCase());
+      if (esistente) {
+        tappa = esistente;
+        setAvvisoNeg(`"${esistente}" esiste già: uso quello`);
+      } else {
+        tappa = nn;
+        setAvvisoNeg('');
+        if (data.tappeLista && data.tappeLista.length) applyUpdate({ tappeLista: firebase.firestore.FieldValue.arrayUnion(nn) });
+        else applyUpdate({ tappeLista: [...DEFAULT_TAPPE, nn] });
+      }
+      setNuovoNeg(false);
+      setNuovoNegNome('');
+    } else {
+      tappa = (tappaList.includes(form.tappa) || form.tappa) ? form.tappa : tappaList[0];
+      setAvvisoNeg('');
+    }
     const item = { id: Date.now(), nome: nomeTrim, qta: form.qta.trim(), tappa, checked: false };
     addItems('listaSpesa', [item]);
     if (!(data.storicoProdotti || []).some(n => (n || '').toLowerCase() === nomeTrim.toLowerCase())) addItems('storicoProdotti', [nomeTrim]);
+    ricordaNegozio(nomeTrim, tappa);
     try { localStorage.setItem('fcc-ultimo-negozio', tappa); } catch (e) {}
-    setForm(f => ({ nome: '', qta: '', tappa: f.tappa }));
+    setForm({ nome: '', qta: '', tappa });
+  }
+  // v60: sposta un prodotto già in lista in un altro negozio (con la sua quantità)
+  function spostaProdotto(item, tappa) {
+    setSpostaId(null);
+    if (!tappa || tappa === item.tappa) return;
+    updateItem('listaSpesa', item, { ...item, tappa });
+    ricordaNegozio(item.nome, tappa);
   }
   function toggle(item) {
     updateItem('listaSpesa', item, { ...item, checked: !item.checked });
@@ -2130,17 +2213,29 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   function renderItem(item) {
     return (
-      <div key={item.id} className={`ls-item${item.checked ? ' presa' : ''}`}>
+      <React.Fragment key={item.id}>
+      <div className={`ls-item${item.checked ? ' presa' : ''}`}>
         <button className="ls-check" onClick={() => toggle(item)} aria-label={item.checked ? 'Rimetti da prendere' : 'Segna come preso'}>
           {item.checked ? '✓' : ''}
         </button>
-        <span className="ls-nome">{nomeProdotto(item.nome)}</span>
-        <input type="text" className="ls-qta" placeholder="–" value={qtaVal(item)}
+        <button className="ls-nome ls-nome-btn" onClick={() => setSpostaId(spostaId === item.id ? null : item.id)} aria-label={`Sposta ${nomeProdotto(item.nome)} in un altro negozio`}>{nomeProdotto(item.nome)}</button>
+        <input type="text" inputMode="decimal" className="ls-qta" placeholder="–" value={qtaVal(item)}
           onChange={e => setQtaDrafts(d => ({ ...d, [item.id]: e.target.value }))}
           onBlur={() => commitQta(item)}
           onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
         <button className="ls-del" onClick={() => del(item)} aria-label="Elimina">✕</button>
       </div>
+      {spostaId === item.id && (
+        <div className="ls-sposta">
+          <span className="ls-sposta-label">Sposta in:</span>
+          <select className="ls-input" value="" onChange={e => spostaProdotto(item, e.target.value)}>
+            <option value="" disabled>Scegli il negozio…</option>
+            {tappaList.filter(t => t !== item.tappa).map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button className="btn small" onClick={() => setSpostaId(null)} aria-label="Chiudi">✕</button>
+        </div>
+      )}
+      </React.Fragment>
     );
   }
 
@@ -2174,18 +2269,57 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           placeholder="Prodotto"
           value={form.nome}
           options={prodottiNote}
-          onChange={val => setForm(f => ({ ...f, nome: val }))}
+          onChange={val => {
+            // v60: prodotto già conosciuto → il menu si mette sul negozio usato l'ultima volta
+            const neg = negoziDelProdotto(val);
+            setForm(f => ({ ...f, nome: val, tappa: (!nuovoNeg && neg.length) ? neg[0] : f.tappa }));
+            setAvvisoNeg('');
+          }}
           onEnter={add}
         />
-        <div className="ls-add-row">
-          <input type="text" className="ls-input ls-add-qta" placeholder="Qtà" value={form.qta}
-            onChange={e => setForm(f => ({ ...f, qta: e.target.value }))}
-            onKeyDown={e => e.key === 'Enter' && add()} />
-          <select className="ls-input ls-add-negozio" value={form.tappa} onChange={e => setForm(f => ({ ...f, tappa: e.target.value }))}>
-            {tappaList.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <button className="btn primary ls-add-btn" onClick={add} aria-label="Aggiungi">＋</button>
-        </div>
+        {!nuovoNeg ? (
+          <div className="ls-add-row">
+            <input type="text" inputMode="decimal" className="ls-input ls-add-qta" placeholder="Qtà" value={form.qta}
+              onChange={e => setForm(f => ({ ...f, qta: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && add()} />
+            <select className="ls-input ls-add-negozio" value={form.tappa} onChange={e => {
+              if (e.target.value === '__nuovo__') { setNuovoNeg(true); setNuovoNegNome(''); setAvvisoNeg(''); }
+              else setForm(f => ({ ...f, tappa: e.target.value }));
+            }}>
+              {form.tappa && !tappaList.includes(form.tappa) && <option value={form.tappa}>{form.tappa}</option>}
+              {tappaList.map(t => <option key={t} value={t}>{t}</option>)}
+              <option value="__nuovo__">➕ Nuovo negozio…</option>
+            </select>
+            <button className="btn primary ls-add-btn" onClick={add} aria-label="Aggiungi">＋</button>
+          </div>
+        ) : (
+          <>
+            <div className="ls-add-row">
+              <input type="text" inputMode="decimal" className="ls-input ls-add-qta" placeholder="Qtà" value={form.qta}
+                onChange={e => setForm(f => ({ ...f, qta: e.target.value }))} />
+              <input type="text" className="ls-input ls-add-negozio ls-nuovo-neg" placeholder="Nome nuovo negozio" autoFocus
+                autoCapitalize="words" value={nuovoNegNome}
+                onChange={e => { setNuovoNegNome(e.target.value); setAvvisoNeg(''); }}
+                onKeyDown={e => e.key === 'Enter' && add()} />
+              <button className="btn ls-add-btn" style={{fontSize:'18px'}} onClick={() => { setNuovoNeg(false); setNuovoNegNome(''); setAvvisoNeg(''); }} aria-label="Annulla nuovo negozio">✕</button>
+            </div>
+            <button className="btn primary" style={{width:'100%',minHeight:'46px',fontSize:'16px'}} onClick={add}>＋ Aggiungi con nuovo negozio</button>
+            <div style={{fontSize:'13px',color:'var(--text2)'}}>Il negozio verrà aggiunto anche in Impostazioni.</div>
+          </>
+        )}
+        {(() => {
+          const sugg = nuovoNeg ? [] : negoziDelProdotto(form.nome);
+          if (sugg.length < 2) return null;
+          return (
+            <div className="ls-sugg">
+              <span className="ls-sposta-label">Comprato da:</span>
+              {sugg.map(t => (
+                <button key={t} className={`ls-chip${form.tappa === t ? ' attivo' : ''}`} onClick={() => setForm(f => ({ ...f, tappa: t }))}>{t}</button>
+              ))}
+            </div>
+          );
+        })()}
+        {avvisoNeg && <div style={{fontSize:'13px',fontWeight:600,color:'var(--orange)'}}>{avvisoNeg}</div>}
       </div>
 
       {lista.length === 0 && casse.length === 0 && <div className="empty">Lista vuota — scrivi un prodotto qui sopra</div>}
@@ -2346,14 +2480,14 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
   const qtyResidua = VALORE_BUONO_PASTO ? saldoBP / VALORE_BUONO_PASTO : 0;
 
   function setFormBPQty(qty) {
-    setFormBP(f => ({ ...f, qty, amount: qty === '' ? '' : (Number(qty) * VALORE_BUONO_PASTO).toFixed(2) }));
+    setFormBP(f => ({ ...f, qty, amount: qty === '' ? '' : (importoIT(qty) * VALORE_BUONO_PASTO).toFixed(2).replace('.', ',') }));
   }
   function setFormBPAmount(amount) {
-    setFormBP(f => ({ ...f, amount, qty: amount === '' ? '' : (Number(amount) / VALORE_BUONO_PASTO).toFixed(2) }));
+    setFormBP(f => ({ ...f, amount, qty: amount === '' ? '' : String(Math.round(importoIT(amount) / VALORE_BUONO_PASTO * 100) / 100).replace('.', ',') }));
   }
   function addBP() {
     if (!formBP.desc || !formBP.amount) return;
-    const b = { id: Date.now(), tipo: formBP.tipo, desc: formBP.desc, qty: formBP.qty ? Number(formBP.qty) : null, amount: Number(formBP.amount), date: formBP.date };
+    const b = { id: Date.now(), tipo: formBP.tipo, desc: formBP.desc, qty: formBP.qty ? importoIT(formBP.qty) : null, amount: importoIT(formBP.amount), date: formBP.date };
     addItems('buoniPasto', [b]);
     setFormBP({ tipo: 'ricevuto', desc: '', qty: '', amount: '', date: localDateStr() });
     setShowBP(false);
@@ -2534,16 +2668,16 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
             <div className="form-row" style={{alignItems:'flex-end'}}>
               <div className="form-group">
                 <label>Quantità (unità)</label>
-                <input type="number" step="1" min="0" placeholder="Es. 20" value={formBP.qty} onChange={e => setFormBPQty(e.target.value)} />
+                <input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="Es. 20" value={formBP.qty} onChange={e => setFormBPQty(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Valore €</label>
-                <input type="number" step="0.01" min="0" placeholder="0.00" value={formBP.amount} onChange={e => setFormBPAmount(e.target.value)} />
+                <input type="text" inputMode="decimal" placeholder="0,00" value={formBP.amount} onChange={e => setFormBPAmount(e.target.value)} />
               </div>
               {formBP.qty !== '' && (
                 <div style={{display:'flex',alignItems:'center',paddingBottom:'2px'}}>
                   <span style={{fontSize:'15px',fontWeight:'800',color:'var(--salmon)',background:'#fff',border:'1.5px solid var(--salmon)',borderRadius:'20px',padding:'6px 14px',whiteSpace:'nowrap'}}>
-                    🍱 {formBP.qty} buon{Number(formBP.qty) === 1 ? 'o' : 'i'}
+                    🍱 {formBP.qty} buon{importoIT(formBP.qty) === 1 ? 'o' : 'i'}
                   </span>
                 </div>
               )}
@@ -2755,10 +2889,9 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
           <div>{(data.tappeLista || DEFAULT_TAPPE).map((t, idx, arr) => (
             <div key={t} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'8px 10px',marginBottom:'6px'}}>
               <input
-                type="number"
-                min="1"
-                max={arr.length}
+                type="text"
                 inputMode="numeric"
+                pattern="[0-9]*"
                 value={tappaPosVal(t, idx)}
                 onChange={e => setTappaPosDraft(t, e.target.value)}
                 onBlur={() => commitTappaPos(t)}
@@ -2794,7 +2927,7 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
           </div>
           <div className="form-group">
             <label>Ripeti ogni (ore, solo prioritarie)</label>
-            <input type="number" min="1" max="12" value={notificheForm.intervalloOre} onChange={e => setNotificheForm(f => ({...f, intervalloOre: e.target.value}))} onBlur={() => salvaNotificheCampo('intervalloOre', notificheForm.intervalloOre)} onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={notificheForm.intervalloOre} onChange={e => setNotificheForm(f => ({...f, intervalloOre: e.target.value}))} onBlur={() => salvaNotificheCampo('intervalloOre', notificheForm.intervalloOre)} onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
           </div>
         </div>
         <div className="form-row">
