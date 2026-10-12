@@ -282,6 +282,8 @@ select:required:valid:not(:focus) {
 .ls-negmenu-riga select, .ls-negmenu-riga input { flex: 1; min-width: 0; }
 .ls-negmenu .btn { font-size: 15px; min-height: 40px; padding: 0 14px; }
 .ls-negmenu-riga .btn { min-height: 46px; }
+.ls-negmenu-sel { font-weight: 600; color: var(--accent-dark); background: #fff; border: 2px solid var(--accent); border-radius: 8px; }
+.ls-negmenu-tit { font-size: 15px; font-weight: 700; color: var(--accent-dark); margin-top: 4px; }
 .ls-negmenu-avviso { font-size: 13px; font-weight: 600; color: var(--orange); }
 .ls-negozio-count { font-size: 14px; font-weight: 600; color: var(--text2); white-space: nowrap; }
 .ls-negozio.fatto .ls-negozio-count { color: #0e7a3d; }
@@ -412,7 +414,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v61";
+const APP_VERSION = "v62";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2438,15 +2440,15 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             </button>
             {negMenu === t && (
               <div className="ls-negmenu">
+                {/* v62: il comando è scritto DENTRO il menu (l'etichetta grigia a parte non si vedeva) */}
                 <div className="ls-negmenu-riga">
-                  <span className="ls-sposta-label">Sposta tutti in:</span>
-                  <select className="ls-input" value="" onChange={e => spostaNegozio(t, e.target.value)}>
-                    <option value="" disabled>Scegli il negozio…</option>
+                  <select className="ls-input ls-negmenu-sel" value="" onChange={e => spostaNegozio(t, e.target.value)}>
+                    <option value="" disabled>📦 Sposta tutti i prodotti in…</option>
                     {tappaList.filter(n => n !== t).map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
+                <div className="ls-negmenu-tit">✏️ Correggi il nome del negozio</div>
                 <div className="ls-negmenu-riga">
-                  <span className="ls-sposta-label">Rinomina:</span>
                   <input type="text" className="ls-input" value={rinomina} autoCapitalize="words"
                     onChange={e => { setRinomina(e.target.value); setAvvisoRin(''); }}
                     onKeyDown={e => e.key === 'Enter' && confermaRinomina(t)} />
