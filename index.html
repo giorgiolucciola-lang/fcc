@@ -275,6 +275,14 @@ select:required:valid:not(:focus) {
 .ls-negozio.fatto { border-color: var(--green-border); background: #fbfefc; }
 .ls-negozio-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: var(--accent-dark); padding: 10px 0 6px; border-bottom: 1px solid var(--border); }
 .ls-negozio.fatto .ls-negozio-head { color: #0e7a3d; }
+.ls-negozio-head-btn { width: 100%; background: none; border: none; border-bottom: 1px solid var(--border); font-family: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ls-negozio-mod { font-size: 13px; opacity: 0.6; margin-left: 4px; }
+.ls-negmenu { background: var(--accent-light); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; margin: 8px 0 6px; display: flex; flex-direction: column; gap: 8px; }
+.ls-negmenu-riga { display: flex; align-items: center; gap: 8px; }
+.ls-negmenu-riga select, .ls-negmenu-riga input { flex: 1; min-width: 0; }
+.ls-negmenu .btn { font-size: 15px; min-height: 40px; padding: 0 14px; }
+.ls-negmenu-riga .btn { min-height: 46px; }
+.ls-negmenu-avviso { font-size: 13px; font-weight: 600; color: var(--orange); }
 .ls-negozio-count { font-size: 14px; font-weight: 600; color: var(--text2); white-space: nowrap; }
 .ls-negozio.fatto .ls-negozio-count { color: #0e7a3d; }
 .ls-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); min-height: 54px; }
@@ -404,7 +412,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v60";
+const APP_VERSION = "v61";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -784,6 +792,85 @@ function App() {
     }
   }
 
+  // ── v61: correzioni sui negozi della Lista della Spesa ──────────────────────
+  // Tutto in UN solo salvataggio (batch), toccando solo le voci interessate.
+  // Sposta i prodotti (e la cassa, se già scritta) del negozio "da" nel negozio "a".
+  // Se anche "a" ha già una cassa, i due importi si sommano.
+  function aggiungiSpostamentoNegozio(batch, ref, da, a) {
+    const FV = firebase.firestore.FieldValue;
+    const lista = data.listaSpesa || [];
+    const casse = data.casseSpesa || [];
+    const prodotti = lista.filter(i => (i.tappa || 'Altro') === da);
+    if (prodotti.length) {
+      batch.update(ref, { listaSpesa: FV.arrayRemove(...prodotti) });
+      batch.update(ref, { listaSpesa: FV.arrayUnion(...prodotti.map(i => ({ ...i, tappa: a }))) });
+    }
+    const cassaDa = casse.find(c => c.tappa === da);
+    if (cassaDa) {
+      const cassaA = casse.find(c => c.tappa === a);
+      const daTogliere = cassaA ? [cassaDa, cassaA] : [cassaDa];
+      const nuova = cassaA
+        ? { ...cassaA, totale: Math.round(((cassaA.totale || 0) + (cassaDa.totale || 0)) * 100) / 100, buoni: Math.round(((cassaA.buoni || 0) + (cassaDa.buoni || 0)) * 100) / 100 }
+        : { ...cassaDa, tappa: a };
+      batch.update(ref, { casseSpesa: FV.arrayRemove(...daTogliere) });
+      batch.update(ref, { casseSpesa: FV.arrayUnion(nuova) });
+    }
+    return prodotti;
+  }
+  async function spostaTuttiNegozio(da, a) {
+    if (!user || !da || !a || da === a) return;
+    const ref = db.collection('users').doc(user.uid);
+    const batch = db.batch();
+    const prodotti = aggiungiSpostamentoNegozio(batch, ref, da, a);
+    // ogni prodotto spostato "ricorda" il nuovo negozio come più recente
+    const mappa = data.prodottiNegozi || {};
+    const chiavi = [...new Set(prodotti.map(i => nomeProdotto(i.nome).toLowerCase()).filter(Boolean))];
+    chiavi.forEach(k => {
+      const prev = mappa[k] || [];
+      batch.update(ref, new firebase.firestore.FieldPath('prodottiNegozi', k), [a, ...prev.filter(t => t !== a)].slice(0, 6));
+    });
+    setSyncing(true);
+    try { await batch.commit(); } finally { setSyncing(false); }
+  }
+  // Cambia il nome di un negozio ovunque: elenco di Impostazioni (stessa posizione),
+  // categoria Budget, prodotti in lista, cassa, negozi ricordati per ogni prodotto.
+  // Restituisce un messaggio d'errore (testo) oppure '' se è andato tutto bene.
+  async function rinominaNegozio(vecchio, nuovoRaw) {
+    if (!user) return 'Non sei collegato';
+    const nuovo = (nuovoRaw || '').trim().replace(/\s+/g, ' ');
+    if (!nuovo) return 'Scrivi il nuovo nome';
+    if (nuovo === vecchio) return '';
+    const elenco = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
+    const doppione = elenco.find(t => t !== vecchio && t.toLowerCase() === nuovo.toLowerCase());
+    if (doppione) return `"${doppione}" esiste già: usa "Sposta tutti in" per unire i due negozi`;
+    const FV = firebase.firestore.FieldValue;
+    const ref = db.collection('users').doc(user.uid);
+    const batch = db.batch();
+    if (elenco.includes(vecchio)) batch.update(ref, { tappeLista: elenco.map(t => t === vecchio ? nuovo : t) });
+    // la categoria Budget resta quella di prima (anche se era quella proposta in automatico)
+    const catMappa = data.tappeCategorieBudget || {};
+    const catAttuale = catMappa[vecchio] || categoriaBudgetDefault(vecchio, data.categorie || DEFAULT_CATS);
+    if (catMappa[vecchio] !== undefined) {
+      batch.update(ref,
+        new firebase.firestore.FieldPath('tappeCategorieBudget', nuovo), catAttuale,
+        new firebase.firestore.FieldPath('tappeCategorieBudget', vecchio), FV.delete());
+    } else {
+      batch.update(ref, new firebase.firestore.FieldPath('tappeCategorieBudget', nuovo), catAttuale);
+    }
+    aggiungiSpostamentoNegozio(batch, ref, vecchio, nuovo);
+    const mappa = data.prodottiNegozi || {};
+    Object.keys(mappa).forEach(k => {
+      const arr = mappa[k] || [];
+      if (arr.includes(vecchio)) {
+        batch.update(ref, new firebase.firestore.FieldPath('prodottiNegozi', k), [...new Set(arr.map(t => t === vecchio ? nuovo : t))]);
+      }
+    });
+    try { if (localStorage.getItem('fcc-ultimo-negozio') === vecchio) localStorage.setItem('fcc-ultimo-negozio', nuovo); } catch (e) {}
+    setSyncing(true);
+    try { await batch.commit(); } catch (e) { return 'Salvataggio non riuscito, riprova'; } finally { setSyncing(false); }
+    return '';
+  }
+
   function login() { auth.signInWithPopup(provider); }
   function logout() { auth.signOut(); setData(null); }
 
@@ -837,9 +924,9 @@ function App() {
 
       {tab === 'budget' && <BudgetTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
       {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
-      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} aggiornaVoceMappa={aggiornaVoceMappa} askConfirm={askConfirm} />}
+      {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} aggiornaVoceMappa={aggiornaVoceMappa} spostaTuttiNegozio={spostaTuttiNegozio} rinominaNegozio={rinominaNegozio} askConfirm={askConfirm} />}
       {tab === 'report' && <ReportTab data={data} addItems={addItems} removeItems={removeItems} askConfirm={askConfirm} />}
-      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} applyUpdate={applyUpdate} />}
+      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} applyUpdate={applyUpdate} rinominaNegozio={rinominaNegozio} />}
 
       {confirmDialog && (
         <div className="confirm-overlay" onClick={() => risolviConfirm(false)}>
@@ -1981,7 +2068,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onEnter, cla
 }
 
 // ── SPESA TAB ──────────────────────────────────────────────────────────────────
-function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, aggiornaVoceMappa, askConfirm }) {
+function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpdate, aggiornaVoceMappa, spostaTuttiNegozio, rinominaNegozio, askConfirm }) {
   // ── LISTA DELLA SPESA COMPATTA (v54) ─────────────────────────────────────────
   // Pensata per l'uso in negozio con una mano sola: per ogni prodotto servono solo
   // nome, quantità (testo libero: "2", "2 etti", "1 kg") e negozio. Il prezzo NON si
@@ -2009,6 +2096,21 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const [avvisoNeg, setAvvisoNeg] = useState('');
   // v60: prodotto di cui è aperto il menu "Sposta in…"
   const [spostaId, setSpostaId] = useState(null);
+  // v61: negozio di cui è aperto il riquadro "Sposta tutti / Rinomina" (tocco sull'intestazione)
+  const [negMenu, setNegMenu] = useState(null);
+  const [rinomina, setRinomina] = useState('');
+  const [avvisoRin, setAvvisoRin] = useState('');
+  function apriNegMenu(t) {
+    if (negMenu === t) { setNegMenu(null); return; }
+    setNegMenu(t); setRinomina(t); setAvvisoRin('');
+  }
+  async function confermaRinomina(t) {
+    const err = await rinominaNegozio(t, rinomina);
+    if (err) { setAvvisoRin(err); return; }
+    const nuovo = rinomina.trim().replace(/\s+/g, ' ');
+    if (form.tappa === t) setForm(f => ({ ...f, tappa: nuovo }));
+    setNegMenu(null); setAvvisoRin('');
+  }
 
   // v60: negozi in cui è stato messo ogni prodotto (il più recente per primo), salvati su
   // Firebase in prodottiNegozi. Se un prodotto non è ancora lì, si guarda la lista attuale.
@@ -2090,15 +2192,11 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   }
   // Prodotti rimasti su un negozio che non è (più) nell'elenco di Impostazioni, ad es. il
   // vecchio "Altro": si spostano tutti insieme su un negozio vero con un solo tocco.
+  // v61: ora in un solo salvataggio, e l'eventuale cassa già scritta segue i prodotti.
   function spostaNegozio(daNegozio, aNegozio) {
-    if (!aNegozio) return;
-    const daSpostare = lista.filter(i => (i.tappa || 'Altro') === daNegozio);
-    if (!daSpostare.length) return;
-    const spostati = daSpostare.map(i => ({ ...i, tappa: aNegozio }));
-    const vecchiaCassa = cassaDi(daNegozio);
-    applyUpdate({ listaSpesa: firebase.firestore.FieldValue.arrayRemove(...daSpostare) })
-      .then(() => applyUpdate({ listaSpesa: firebase.firestore.FieldValue.arrayUnion(...spostati) }));
-    if (vecchiaCassa) applyUpdate({ casseSpesa: firebase.firestore.FieldValue.arrayRemove(vecchiaCassa) });
+    if (!aNegozio || aNegozio === daNegozio) return;
+    spostaTuttiNegozio(daNegozio, aNegozio);
+    setNegMenu(null);
   }
   // Tocco su una tappa in alto → scorre direttamente ai prodotti di quel negozio
   function vaiANegozio(t) {
@@ -2332,12 +2430,32 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         const fatta = tappaFatta(t);
         return (
           <div key={t} id={'negozio-' + t} className={`ls-negozio${fatta ? ' fatto' : ''}`}>
-            <div className="ls-negozio-head">
-              <span>{fatta ? '✓ ' : ''}{tappeGiro.indexOf(t) + 1}. {t}</span>
+            <button type="button" className="ls-negozio-head ls-negozio-head-btn" onClick={() => apriNegMenu(t)} aria-label={`Sposta o rinomina ${t}`}>
+              <span>{fatta ? '✓ ' : ''}{tappeGiro.indexOf(t) + 1}. {t} <span className="ls-negozio-mod">{negMenu === t ? '▲' : '✏️'}</span></span>
               <span className="ls-negozio-count">
                 {fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso')}
               </span>
-            </div>
+            </button>
+            {negMenu === t && (
+              <div className="ls-negmenu">
+                <div className="ls-negmenu-riga">
+                  <span className="ls-sposta-label">Sposta tutti in:</span>
+                  <select className="ls-input" value="" onChange={e => spostaNegozio(t, e.target.value)}>
+                    <option value="" disabled>Scegli il negozio…</option>
+                    {tappaList.filter(n => n !== t).map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div className="ls-negmenu-riga">
+                  <span className="ls-sposta-label">Rinomina:</span>
+                  <input type="text" className="ls-input" value={rinomina} autoCapitalize="words"
+                    onChange={e => { setRinomina(e.target.value); setAvvisoRin(''); }}
+                    onKeyDown={e => e.key === 'Enter' && confermaRinomina(t)} />
+                  <button className="btn primary small" onClick={() => confermaRinomina(t)}>OK</button>
+                </div>
+                {avvisoRin && <div className="ls-negmenu-avviso">{avvisoRin}</div>}
+                <button className="btn small" style={{alignSelf:'flex-end'}} onClick={() => setNegMenu(null)}>Chiudi</button>
+              </div>
+            )}
             {pos < 0 && (
               <div className="ls-orfano">
                 <span>Negozio non presente in Impostazioni. Sposta questi prodotti in:</span>
@@ -2724,9 +2842,18 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
 // Giorgio non li personalizza dalla tab Impostazioni.
 const DEFAULT_NOTIFICHE = { orario: '10:00', intervalloOre: '3', fasciaInizio: '08:00', fasciaFine: '20:00' };
 
-function ImpostazioniTab({ data, saveData, applyUpdate }) {
+function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
   const [newCat, setNewCat] = useState('');
   const [newTappa, setNewTappa] = useState('');
+  // v61: negozio di cui si sta correggendo il nome
+  const [editTappa, setEditTappa] = useState(null);
+  const [editTappaVal, setEditTappaVal] = useState('');
+  const [avvisoTappa, setAvvisoTappa] = useState('');
+  async function salvaNomeTappa(t) {
+    const err = await rinominaNegozio(t, editTappaVal);
+    if (err) { setAvvisoTappa(err); return; }
+    setEditTappa(null); setAvvisoTappa('');
+  }
   const [newProdotto, setNewProdotto] = useState('');
   // Attivazione notifiche push su questo dispositivo: stato del pulsante e messaggio
   // d'errore da mostrare se qualcosa va storto (es. permesso negato).
@@ -2899,13 +3026,31 @@ function ImpostazioniTab({ data, saveData, applyUpdate }) {
                 style={{width:'44px',padding:'6px 4px',fontSize:'13px',textAlign:'center',flexShrink:0}}
                 title="Posizione nel giro di spesa"
               />
-              <span style={{flex:1,fontSize:'15px',minWidth:0,overflowWrap:'anywhere'}}>{t}</span>
+              {editTappa === t ? (
+                <input type="text" value={editTappaVal} autoFocus autoCapitalize="words"
+                  onChange={e => { setEditTappaVal(e.target.value); setAvvisoTappa(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') salvaNomeTappa(t); if (e.key === 'Escape') setEditTappa(null); }}
+                  style={{flex:1,minWidth:0,fontSize:'16px',padding:'6px 8px'}} />
+              ) : (
+                <span style={{flex:1,fontSize:'15px',minWidth:0,overflowWrap:'anywhere'}}>{t}</span>
+              )}
+              {editTappa === t ? (
+                <React.Fragment>
+                  <button className="btn small primary" onClick={() => salvaNomeTappa(t)} title="Salva nome">OK</button>
+                  <button className="btn small" onClick={() => { setEditTappa(null); setAvvisoTappa(''); }} title="Annulla">✕</button>
+                </React.Fragment>
+              ) : (
+              <React.Fragment>
+              <button className="btn small" onClick={() => { setEditTappa(t); setEditTappaVal(t); setAvvisoTappa(''); }} title="Rinomina negozio">✏️</button>
               <select value={catBudgetNegozio(t)} onChange={e => setCatBudgetNegozio(t, e.target.value)} title="Categoria Budget" style={{width:'112px',flexShrink:0,fontSize:'16px',padding:'6px 4px'}}>
                 {(data.categorie || DEFAULT_CATS).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <button className="btn small danger" onClick={() => delTappa(t)} title="Elimina negozio">✕</button>
+              </React.Fragment>
+              )}
             </div>
           ))}</div>
+          {avvisoTappa && <div style={{fontSize:'13px',fontWeight:600,color:'var(--orange)',margin:'4px 0'}}>{avvisoTappa}</div>}
           <div className="form-row" style={{marginTop:'10px'}}>
             <input type="text" placeholder="Nuovo negozio..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
             <button className="btn primary" onClick={addTappa}>Aggiungi</button>
