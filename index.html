@@ -286,6 +286,7 @@ select:required:valid:not(:focus) {
 .ls-negmenu-riga .btn { min-height: 46px; }
 .ls-negmenu-sel { font-weight: 600; color: var(--accent-dark); background: #fff; border: 2px solid var(--accent); border-radius: 8px; }
 .ls-negmenu-tit { font-size: 15px; font-weight: 700; color: var(--accent-dark); margin-top: 4px; }
+.ls-buoni-info { font-size: 14px; font-weight: 600; color: var(--text); background: var(--salmon-bg, #fff4ef); border: 1px solid var(--salmon-border, #f2c2ad); border-radius: 8px; padding: 6px 10px; margin-top: 8px; }
 .ls-negmenu-avviso { font-size: 13px; font-weight: 600; color: var(--orange); }
 .ls-negozio-count { font-size: 14px; font-weight: 600; color: var(--text2); white-space: nowrap; }
 .ls-negozio.fatto .ls-negozio-count { color: #0e7a3d; }
@@ -416,7 +417,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v64";
+const APP_VERSION = "v65";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -636,6 +637,10 @@ const DEFAULT_SPESA_CATS = ['Frutta e Verdura', 'Carne e Pesce', 'Latticini', 'P
 // (es. Supermercato, Fruttivendolo, Farmacia...). Concetto separato dalla categoria
 // del prodotto: la categoria dice COSA è, la tappa dice DOVE si compra.
 const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia'];
+// Buoni pasto (v65): valore di un buono e limite di buoni usabili in un giorno (modificabile
+// in Impostazioni → Negozi del giro spesa).
+const VALORE_BUONO_PASTO = 8;
+const DEFAULT_BUONI_MAX_GIORNO = 8;
 // Nomi prodotto uniformi (v55): iPhone mette la maiuscola iniziale, il Mac no. Qui si
 // normalizza sempre: prima lettera maiuscola, il resto come scritto.
 function nomeProdotto(s) {
@@ -869,6 +874,12 @@ function App() {
         new firebase.firestore.FieldPath('tappeCategorieBudget', vecchio), FV.delete());
     } else {
       batch.update(ref, new firebase.firestore.FieldPath('tappeCategorieBudget', nuovo), catAttuale);
+    }
+    // v65: il segno "accetta i buoni" segue il nuovo nome
+    if ((data.tappeBuoni || {})[vecchio]) {
+      batch.update(ref,
+        new firebase.firestore.FieldPath('tappeBuoni', nuovo), true,
+        new firebase.firestore.FieldPath('tappeBuoni', vecchio), FV.delete());
     }
     aggiungiSpostamentoNegozio(batch, ref, vecchio, nuovo);
     const mappa = data.prodottiNegozi || {};
@@ -2255,7 +2266,15 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (!d) return;
     const vecchia = cassaDi(t);
     let totale = parseNumIT(d.totale !== undefined ? d.totale : (vecchia ? String(vecchia.totale) : '')) || 0;
-    const buoni = parseNumIT(d.buoni !== undefined ? d.buoni : (vecchia ? String(vecchia.buoni || '') : '')) || 0;
+    let buoni = parseNumIT(d.buoni !== undefined ? d.buoni : (vecchia ? String(vecchia.buoni || '') : '')) || 0;
+    // v65: negozio che accetta i buoni → quando si scrive la cassa per la prima volta e il
+    // campo buoni è vuoto, l'app propone i buoni interi che ci stanno (rispettando il limite
+    // giornaliero e i buoni disponibili). Il valore resta modificabile a mano.
+    const primaCassa = !vecchia || !(vecchia.totale > 0);
+    const buoniNonScritti = d.buoni === undefined || String(d.buoni).trim() === '';
+    if (accettaBuoni(t) && primaCassa && buoniNonScritti && totale > 0 && buoni <= 0) {
+      buoni = buoniProposti(t, totale) * VALORE_BUONO_PASTO;
+    }
     // v58: spesa pagata tutta con i buoni → se la cassa è vuota si riempie con lo stesso importo
     if (totale <= 0 && buoni > 0) totale = buoni;
     const nuova = { id: vecchia ? vecchia.id : Date.now(), tappa: t, totale: Math.round(totale * 100) / 100, buoni: Math.round(buoni * 100) / 100 };
@@ -2272,6 +2291,23 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   }
 
   // ── Categoria Budget di ogni negozio (impostabile in Impostazioni) ──
+  // ── Buoni pasto (v65) ──
+  function accettaBuoni(t) { return !!(data.tappeBuoni || {})[t]; }
+  const buoniMaxGiorno = Number(data.buoniMaxGiorno != null ? data.buoniMaxGiorno : DEFAULT_BUONI_MAX_GIORNO);
+  const saldoBuoni = (data.buoniPasto || []).reduce((a, b) => a + ((b.tipo || 'ricevuto') === 'ricevuto' ? 1 : -1) * Number(b.amount || 0), 0);
+  // buoni già usati oggi: quelli scritti nelle casse degli altri negozi + quelli già registrati oggi
+  function buoniUsatiOggi(escludi) {
+    const oggi = localDateStr();
+    const inCassa = casse.filter(c => c.tappa !== escludi).reduce((a, c) => a + (Number(c.buoni) || 0), 0);
+    const registrati = (data.buoniPasto || []).filter(b => b.tipo === 'speso' && b.date === oggi).reduce((a, b) => a + Number(b.amount || 0), 0);
+    return Math.round((inCassa + registrati) / VALORE_BUONO_PASTO * 100) / 100;
+  }
+  function buoniProposti(t, totale) {
+    const ciStanno = Math.floor((totale + 0.001) / VALORE_BUONO_PASTO);
+    const restantiOggi = Math.floor(buoniMaxGiorno - buoniUsatiOggi(t) + 0.001);
+    const disponibili = Math.floor((saldoBuoni - casse.filter(c => c.tappa !== t).reduce((a, c) => a + (Number(c.buoni) || 0), 0) + 0.001) / VALORE_BUONO_PASTO);
+    return Math.max(0, Math.min(ciStanno, restantiOggi, disponibili));
+  }
   function categoriaBudgetDi(t) {
     const mappa = data.tappeCategorieBudget || {};
     if (mappa[t]) return mappa[t];
@@ -2313,7 +2349,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       const buoni = Math.min(Number(c.buoni) || 0, Number(c.totale) || 0);
       const netto = Math.round(((Number(c.totale) || 0) - buoni) * 100) / 100;
       if (netto > 0) nuoveSpese.push({ id: base + idx, desc: `Spesa – ${c.tappa}`, amount: netto, cat: categoriaBudgetDi(c.tappa), subcat: '', date: oggi });
-      if (buoni > 0) nuoviBP.push({ id: base + 500 + idx, tipo: 'speso', desc: `Spesa – ${c.tappa}`, qty: null, amount: Math.round(buoni * 100) / 100, date: oggi });
+      if (buoni > 0) nuoviBP.push({ id: base + 500 + idx, tipo: 'speso', desc: `Spesa – ${c.tappa}`, qty: Math.round(buoni / VALORE_BUONO_PASTO * 100) / 100, amount: Math.round(buoni * 100) / 100, date: oggi });
     });
     const negoziChiusi = new Set(casseValide.map(c => c.tappa));
     const daTogliere = presi.filter(i => negoziChiusi.has(i.tappa || 'Altro'));
@@ -2511,6 +2547,21 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
                   onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
               </label>
             </div>
+            {(() => {
+              // v65: riepilogo buoni del negozio (solo informativo)
+              const c = cassaDi(t);
+              const b = c ? (Number(c.buoni) || 0) : 0;
+              if (b > 0) {
+                const diff = Math.round(((Number(c.totale) || 0) - b) * 100) / 100;
+                const n = Math.round(b / VALORE_BUONO_PASTO * 100) / 100;
+                return <div className="ls-buoni-info">🍱 {String(n).replace('.', ',')} buon{n === 1 ? 'o' : 'i'} ({formatEuro(b)}){diff > 0 ? <> · differenza pagata a parte {formatEuro(diff)}</> : null}</div>;
+              }
+              if (accettaBuoni(t) && !(c && c.totale > 0)) {
+                const rest = Math.max(0, Math.floor(buoniMaxGiorno - buoniUsatiOggi(t) + 0.001));
+                return <div className="ls-buoni-info">🍱 Accetta i buoni: scrivi il totale in Cassa, i buoni si mettono da soli (oggi ne puoi usare ancora {rest})</div>;
+              }
+              return null;
+            })()}
           </div>
         );
       })}
@@ -2541,7 +2592,6 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
   // Ogni buono pasto vale un importo fisso (VALORE_BUONO_PASTO); ogni voce è di tipo
   // "ricevuto" (entrata, es. accredito mensile dall'azienda) o "speso" (uscita, es. usato al supermercato).
   // Il saldo residuo = totale ricevuti - totale spesi, calcolato su tutta la storia (non solo il mese in vista).
-  const VALORE_BUONO_PASTO = 8;
   const [showBP, setShowBP] = useState(false);
   const [formBP, setFormBP] = useState({ tipo: 'ricevuto', desc: '', qty: '', amount: '', date: localDateStr() });
 
@@ -2875,6 +2925,18 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
   const [editTappa, setEditTappa] = useState(null);
   const [editTappaVal, setEditTappaVal] = useState('');
   const [avvisoTappa, setAvvisoTappa] = useState('');
+  // v65: buoni pasto per negozio e limite giornaliero
+  function toggleBuoniNegozio(t) {
+    const mappa = { ...(data.tappeBuoni || {}) };
+    if (mappa[t]) delete mappa[t]; else mappa[t] = true;
+    saveData({ tappeBuoni: mappa });
+  }
+  const [buoniMaxDraft, setBuoniMaxDraft] = useState(String(data.buoniMaxGiorno != null ? data.buoniMaxGiorno : DEFAULT_BUONI_MAX_GIORNO));
+  function salvaBuoniMax() {
+    const n = parseInt(buoniMaxDraft, 10);
+    if (!n || n < 1) { setBuoniMaxDraft(String(data.buoniMaxGiorno != null ? data.buoniMaxGiorno : DEFAULT_BUONI_MAX_GIORNO)); return; }
+    if (n !== data.buoniMaxGiorno) saveData({ buoniMaxGiorno: n });
+  }
   async function salvaNomeTappa(t) {
     const err = await rinominaNegozio(t, editTappaVal);
     if (err) { setAvvisoTappa(err); return; }
@@ -3080,6 +3142,32 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
           <div className="form-row" style={{marginTop:'10px'}}>
             <input type="text" placeholder="Nuovo negozio..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
             <button className="btn primary" onClick={addTappa}>Aggiungi</button>
+          </div>
+
+          {/* v65: negozi dove si pagano i buoni pasto + limite giornaliero */}
+          <div className="setting-label" style={{marginTop:'22px'}}>🍱 Negozi che accettano i buoni pasto</div>
+          <div style={{fontSize:'14px',color:'var(--text)',marginBottom:'10px',lineHeight:'1.5'}}>
+            Tocca i negozi dove paghi con i buoni (quelli scelti diventano color salmone). Lì, quando scrivi il totale in Cassa, l'app mette da sola i buoni interi che ci stanno, senza superare il limite del giorno. Puoi sempre correggerli a mano.
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'14px'}}>
+            {(data.tappeLista || DEFAULT_TAPPE).map(t => {
+              const on = !!(data.tappeBuoni || {})[t];
+              return (
+                <button key={t} type="button" onClick={() => toggleBuoniNegozio(t)}
+                  style={{fontFamily:'inherit',fontSize:'15px',fontWeight:on ? 700 : 500,padding:'8px 14px',borderRadius:'20px',cursor:'pointer',
+                    background:on ? 'var(--salmon)' : '#fff',color:on ? '#fff' : 'var(--text)',border:'2px solid ' + (on ? 'var(--salmon)' : 'var(--border2)')}}>
+                  {on ? '✓ ' : ''}{t}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+            <span style={{fontSize:'15px',fontWeight:600,color:'var(--text)'}}>Buoni utilizzabili al giorno:</span>
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={buoniMaxDraft}
+              onChange={e => setBuoniMaxDraft(e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={salvaBuoniMax}
+              onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+              style={{width:'64px',fontSize:'16px',padding:'6px 8px',textAlign:'center'}} />
           </div>
         </div>
       </div>
