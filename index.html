@@ -422,7 +422,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v67";
+const APP_VERSION = "v68";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -648,6 +648,12 @@ const VALORE_BUONO_PASTO = 8;
 const DEFAULT_BUONI_MAX_GIORNO = 8;
 // Nomi prodotto uniformi (v55): iPhone mette la maiuscola iniziale, il Mac no. Qui si
 // normalizza sempre: prima lettera maiuscola, il resto come scritto.
+// v68: "chiave" di un nome di negozio per riconoscere i doppioni: senza spazi in più, senza
+// differenze di maiuscole e con le lettere accentate scritte sempre allo stesso modo (Mac e
+// iPhone possono codificare la "ò" di "Decò" in due modi diversi che a video sembrano uguali).
+function chiaveNegozio(t) {
+  return (t || '').normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('it');
+}
 function nomeProdotto(s) {
   const t = (s || '').trim().replace(/\s+/g, ' ');
   return t ? t.charAt(0).toLocaleUpperCase('it') + t.slice(1) : '';
@@ -815,13 +821,72 @@ function App() {
     }
   }
 
-  // v66: toglie una volta sola i negozi ripetuti con lo stesso identico nome (creati
-  // prima che "Nuovo negozio" in Impostazioni controllasse i doppioni)
+  // v68: unisce da sola i negozi doppi. Prima (v66) toglieva solo i nomi identici carattere
+  // per carattere; ora riconosce anche spazi in più, maiuscole e accenti codificati in modo
+  // diverso (chiaveNegozio). Resta il PRIMO dell'elenco; i prodotti, la cassa, la categoria
+  // Budget, il segno "accetta i buoni" e i negozi ricordati per ogni prodotto passano su di
+  // lui. Tutto in un solo salvataggio.
   useEffect(() => {
     const el = data && data.tappeLista;
     if (!user || !el || !el.length) return;
-    const unici = el.filter((t, i) => el.indexOf(t) === i);
-    if (unici.length !== el.length) applyUpdate({ tappeLista: unici });
+    const tenuto = {};      // chiave → nome che resta
+    const doppi = {};       // nome doppio → nome che resta
+    el.forEach(t => {
+      const k = chiaveNegozio(t);
+      if (tenuto[k] === undefined) tenuto[k] = t; else if (t !== tenuto[k]) doppi[t] = tenuto[k];
+    });
+    const unici = el.filter((t, i) => tenuto[chiaveNegozio(t)] === t && el.indexOf(t) === i);
+    if (unici.length === el.length) return;
+    const FV = firebase.firestore.FieldValue;
+    const ref = db.collection('users').doc(user.uid);
+    const batch = db.batch();
+    batch.update(ref, { tappeLista: unici });
+    const verso = t => doppi[t] || t;
+    // prodotti in lista
+    const prodotti = (data.listaSpesa || []).filter(i => doppi[i.tappa]);
+    if (prodotti.length) {
+      batch.update(ref, { listaSpesa: FV.arrayRemove(...prodotti) });
+      batch.update(ref, { listaSpesa: FV.arrayUnion(...prodotti.map(i => ({ ...i, tappa: verso(i.tappa) }))) });
+    }
+    // casse: se il negozio doppio e quello che resta hanno entrambi una cassa, si sommano
+    const casse = data.casseSpesa || [];
+    const toccate = casse.filter(c => doppi[c.tappa] || Object.values(doppi).includes(c.tappa));
+    if (toccate.some(c => doppi[c.tappa])) {
+      const perNegozio = {};
+      toccate.forEach(c => {
+        const t = verso(c.tappa);
+        const p = perNegozio[t];
+        perNegozio[t] = p
+          ? { ...p, totale: Math.round(((p.totale || 0) + (c.totale || 0)) * 100) / 100, buoni: Math.round(((p.buoni || 0) + (c.buoni || 0)) * 100) / 100 }
+          : { ...c, tappa: t };
+      });
+      batch.update(ref, { casseSpesa: FV.arrayRemove(...toccate) });
+      batch.update(ref, { casseSpesa: FV.arrayUnion(...Object.values(perNegozio).map(senzaUndefined)) });
+    }
+    // categoria Budget e "accetta i buoni": se il doppio li aveva e quello che resta no, passano
+    const cat = data.tappeCategorieBudget || {};
+    const buoni = data.tappeBuoni || {};
+    Object.keys(doppi).forEach(d => {
+      const t = doppi[d];
+      if (cat[d] !== undefined) {
+        if (cat[t] === undefined) batch.update(ref, new firebase.firestore.FieldPath('tappeCategorieBudget', t), cat[d]);
+        batch.update(ref, new firebase.firestore.FieldPath('tappeCategorieBudget', d), FV.delete());
+      }
+      if (buoni[d] !== undefined) {
+        if (buoni[d] && !buoni[t]) batch.update(ref, new firebase.firestore.FieldPath('tappeBuoni', t), true);
+        batch.update(ref, new firebase.firestore.FieldPath('tappeBuoni', d), FV.delete());
+      }
+    });
+    // negozi ricordati per ogni prodotto
+    const mappa = data.prodottiNegozi || {};
+    Object.keys(mappa).forEach(k => {
+      const arr = mappa[k] || [];
+      if (arr.some(t => doppi[t])) {
+        batch.update(ref, new firebase.firestore.FieldPath('prodottiNegozi', k), [...new Set(arr.map(verso))]);
+      }
+    });
+    try { const u = localStorage.getItem('fcc-ultimo-negozio'); if (doppi[u]) localStorage.setItem('fcc-ultimo-negozio', doppi[u]); } catch (e) {}
+    batch.commit().catch(() => {});
   }, [data && data.tappeLista]);
 
   // ── v61: correzioni sui negozi della Lista della Spesa ──────────────────────
@@ -869,11 +934,11 @@ function App() {
   // Restituisce un messaggio d'errore (testo) oppure '' se è andato tutto bene.
   async function rinominaNegozio(vecchio, nuovoRaw) {
     if (!user) return 'Non sei collegato';
-    const nuovo = (nuovoRaw || '').trim().replace(/\s+/g, ' ');
+    const nuovo = (nuovoRaw || '').normalize('NFC').trim().replace(/\s+/g, ' ');
     if (!nuovo) return 'Scrivi il nuovo nome';
     if (nuovo === vecchio) return '';
     const elenco = (data.tappeLista && data.tappeLista.length) ? data.tappeLista : DEFAULT_TAPPE;
-    const doppione = elenco.find(t => t !== vecchio && t.toLowerCase() === nuovo.toLowerCase());
+    const doppione = elenco.find(t => t !== vecchio && chiaveNegozio(t) === chiaveNegozio(nuovo));
     if (doppione) return `"${doppione}" esiste già: usa "Sposta tutti in" per unire i due negozi`;
     const FV = firebase.firestore.FieldValue;
     const ref = db.collection('users').doc(user.uid);
@@ -2215,10 +2280,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   function add() {
     const nomeTrim = nomeProdotto(form.nome);
     if (!nomeTrim) return;
-    const testoNeg = (form.tappa || '').trim().replace(/\s+/g, ' ');
+    const testoNeg = (form.tappa || '').normalize('NFC').trim().replace(/\s+/g, ' ');
     if (!testoNeg) { setAvvisoNeg('Scrivi o scegli il negozio'); return; }
-    let tappa = tappaList.find(t => t.toLowerCase() === testoNeg.toLowerCase())
-      || lista.map(i => i.tappa).find(t => t && t.toLowerCase() === testoNeg.toLowerCase());
+    let tappa = tappaList.find(t => chiaveNegozio(t) === chiaveNegozio(testoNeg))
+      || lista.map(i => i.tappa).find(t => t && chiaveNegozio(t) === chiaveNegozio(testoNeg));
     if (!tappa) {
       if (negNuovo !== testoNeg) {
         setAvvisoNeg(`"${testoNeg}" non è tra i tuoi negozi: sceglilo dall'elenco oppure tocca "➕ Crea negozio"`);
@@ -3071,10 +3136,10 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
     saveData({ storicoProdotti: (data.storicoProdotti || []).filter(x => x !== p) });
   }
   function addTappa() {
-    const nome = newTappa.trim().replace(/\s+/g, ' ');
+    const nome = newTappa.normalize('NFC').trim().replace(/\s+/g, ' ');
     if (!nome) return;
     // v66: niente doppioni (anche con maiuscole o spazi diversi)
-    const esistente = (data.tappeLista || DEFAULT_TAPPE).find(x => x.trim().toLowerCase() === nome.toLowerCase());
+    const esistente = (data.tappeLista || DEFAULT_TAPPE).find(x => chiaveNegozio(x) === chiaveNegozio(nome));
     if (esistente) { setAvvisoTappa(`"${esistente}" è già nell'elenco`); return; }
     saveData({ tappeLista: [...(data.tappeLista || DEFAULT_TAPPE), nome] });
     setNewTappa(''); setAvvisoTappa('');
