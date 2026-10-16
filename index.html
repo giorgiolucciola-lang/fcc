@@ -422,7 +422,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v70";
+const APP_VERSION = "v71";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2410,18 +2410,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     let buoni = parseNumIT(d.buoni !== undefined ? d.buoni : (vecchia ? String(vecchia.buoni || '') : '')) || 0;
     // v70: le commissioni hanno solo la Cassa, mai i buoni pasto
     if (isServizio(t)) buoni = 0;
-    // v65: negozio che accetta i buoni → quando si scrive la cassa per la prima volta e il
-    // campo buoni è vuoto, l'app propone i buoni interi che ci stanno (rispettando il limite
-    // giornaliero e i buoni disponibili). Il valore resta modificabile a mano.
-    const primaCassa = !vecchia || !(vecchia.totale > 0);
-    const buoniNonScritti = d.buoni === undefined || String(d.buoni).trim() === '';
-    if (accettaBuoni(t) && !isServizio(t) && primaCassa && buoniNonScritti && totale > 0 && buoni <= 0) {
-      buoni = buoniProposti(t, totale) * VALORE_BUONO_PASTO;
+    // v71: nei negozi che accettano i buoni, i buoni sono AUTOMATICI: ogni volta che cambia
+    // la Cassa l'app ricalcola i buoni interi che ci stanno (limite del giorno e buoni
+    // disponibili). Diventano "a mano" solo se si scrive un numero nel campo buoni;
+    // svuotando il campo buoni si torna all'automatico.
+    let manuale;
+    if (d.buoni !== undefined) manuale = String(d.buoni).trim() !== '';
+    else manuale = !!(vecchia && vecchia.buoniMan);
+    if (accettaBuoni(t) && !isServizio(t) && !manuale) {
+      buoni = totale > 0 ? buoniProposti(t, totale) * VALORE_BUONO_PASTO : 0;
     }
     // v58: spesa pagata tutta con i buoni → se la cassa è vuota si riempie con lo stesso importo
     if (totale <= 0 && buoni > 0) totale = buoni;
-    const nuova = { id: vecchia ? vecchia.id : Date.now(), tappa: t, totale: Math.round(totale * 100) / 100, buoni: Math.round(buoni * 100) / 100 };
-    if (vecchia && vecchia.totale === nuova.totale && (vecchia.buoni || 0) === nuova.buoni) return;
+    const nuova = { id: vecchia ? vecchia.id : Date.now(), tappa: t, totale: Math.round(totale * 100) / 100, buoni: Math.round(buoni * 100) / 100, ...(manuale && accettaBuoni(t) ? { buoniMan: true } : {}) };
+    if (vecchia && vecchia.totale === nuova.totale && (vecchia.buoni || 0) === nuova.buoni && !!vecchia.buoniMan === !!nuova.buoniMan) return;
     if (vecchia && totale <= 0 && buoni <= 0) {
       applyUpdate({ casseSpesa: firebase.firestore.FieldValue.arrayRemove(vecchia) });
       return;
@@ -2435,7 +2437,21 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   // ── Categoria Budget di ogni negozio (impostabile in Impostazioni) ──
   // ── Buoni pasto (v65) ──
-  function accettaBuoni(t) { return !!(data.tappeBuoni || {})[t]; }
+  // v71: confronto dei nomi tollerante (accenti scritti in modi diversi, maiuscole, spazi)
+  function chiaveNome(x) { return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function accettaBuoni(t) {
+    const m = data.tappeBuoni || {};
+    if (m[t]) return true;
+    const k = chiaveNome(t);
+    return Object.keys(m).some(x => m[x] && chiaveNome(x) === k);
+  }
+  // v71: buoni da applicare con un tocco (per le casse scritte prima della v71)
+  function applicaBuoni(t, n) {
+    const c = cassaDi(t);
+    if (!c) return;
+    const { buoniMan, ...resto } = c;
+    updateItem('casseSpesa', c, { ...resto, buoni: Math.round(n * VALORE_BUONO_PASTO * 100) / 100 });
+  }
   // v69: commissione = luogo senza cassa (Comune, lavanderia, studio professionale…)
   function isServizio(t) { return !!(data.tappeServizio || {})[t]; }
   const buoniMaxGiorno = Number(data.buoniMaxGiorno != null ? data.buoniMaxGiorno : DEFAULT_BUONI_MAX_GIORNO);
@@ -2743,6 +2759,19 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
                 const diff = Math.round(((Number(c.totale) || 0) - b) * 100) / 100;
                 const n = Math.round(b / VALORE_BUONO_PASTO * 100) / 100;
                 return <div className="ls-buoni-info">🍱 {String(n).replace('.', ',')} buon{n === 1 ? 'o' : 'i'} ({formatEuro(b)}){diff > 0 ? <> · differenza pagata a parte {formatEuro(diff)}</> : null}</div>;
+              }
+              // v71: negozio che accetta i buoni ma con 0 buoni → spiega il motivo
+              if (accettaBuoni(t) && !isServizio(t) && c && c.totale > 0) {
+                if (c.buoniMan) return <div className="ls-buoni-info">🍱 Nessun buono (scelto a mano). Svuota il campo buoni e l'app li rimette da sola.</div>;
+                const n = buoniProposti(t, c.totale);
+                if (n > 0) return (
+                  <button type="button" className="ls-buoni-info" style={{cursor:'pointer',fontFamily:'inherit',width:'100%',textAlign:'left'}}
+                    onClick={() => applicaBuoni(t, n)}>🍱 Tocca qui per mettere {n} buon{n === 1 ? 'o' : 'i'} ({formatEuro(n * VALORE_BUONO_PASTO)})</button>
+                );
+                const restanti = Math.floor(buoniMaxGiorno - buoniUsatiOggi(t) + 0.001);
+                const motivo = c.totale < VALORE_BUONO_PASTO ? `totale sotto ${formatEuro(VALORE_BUONO_PASTO)}`
+                  : restanti <= 0 ? 'limite di oggi raggiunto' : 'buoni esauriti';
+                return <div className="ls-buoni-info">🍱 Nessun buono: {motivo}</div>;
               }
               if (accettaBuoni(t) && !(c && c.totale > 0)) {
                 const rest = Math.max(0, Math.floor(buoniMaxGiorno - buoniUsatiOggi(t) + 0.001));
