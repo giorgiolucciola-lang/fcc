@@ -312,6 +312,11 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 .ls-del { background: none; border: none; color: var(--text3); font-size: 18px; padding: 8px 2px 8px 6px; cursor: pointer; flex-shrink: 0; }
 .ls-cassa { display: flex; gap: 10px; padding-top: 10px; }
 .ls-cassa label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 600; color: var(--text2); }
+.ls-data-spesa { background: #fff; border: 1.5px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin: 14px 0 12px; }
+.ls-data-titolo { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.ls-data-riga { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ls-data-riga input[type=date] { font-size: 17px; max-width: 190px; }
+.ls-data-lunga { font-size: 15px; color: var(--text); margin-top: 8px; font-weight: 600; }
 .btn.primary.ls-registra { width: 100%; color: #fff; font-size: 17px; padding: 14px; background: var(--green); border-color: var(--green); }
 
 /* REPORT */
@@ -422,7 +427,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v71";
+const APP_VERSION = "v72";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2230,6 +2235,22 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const [form, setForm] = useState({ nome: '', qta: '', tappa: tappaList.includes(ultimoNegozio) ? ultimoNegozio : tappaList[0] });
   // Bozze locali per i campi cassa (si salvano su Firebase solo all'uscita dal campo)
   const [cassaDrafts, setCassaDrafts] = useState({});
+  // v72: data della spesa (parte da oggi, si può mettere ieri o un altro giorno)
+  const [dataSpesa, setDataSpesa] = useState(localDateStr());
+  const oggiStr = localDateStr();
+  const ieriStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localDateStr(d); })();
+  const dataSpesaOk = /^\d{4}-\d{2}-\d{2}$/.test(dataSpesa || '') ? dataSpesa : oggiStr;
+  const dataBreve = (() => { const [y, m, d] = dataSpesaOk.split('-'); return `${d}/${m}`; })();
+  const nomeGiorno = (() => {
+    const [y, m, d] = dataSpesaOk.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('it-IT', { weekday: 'long' });
+  })();
+  const dataLunga = (() => {
+    const [y, m, d] = dataSpesaOk.split('-').map(Number);
+    const t = new Date(y, m - 1, d).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+    const nome = t.charAt(0).toUpperCase() + t.slice(1);
+    return dataSpesaOk === oggiStr ? `${nome} — oggi` : dataSpesaOk === ieriStr ? `${nome} — ieri` : nome;
+  })();
   const [qtaDrafts, setQtaDrafts] = useState({});
   // v67: il negozio si scrive (con suggerimenti) invece di sceglierlo da un menu.
   // Un negozio nuovo nasce solo toccando "➕ Crea negozio": negNuovo ricorda quel nome,
@@ -2458,7 +2479,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const saldoBuoni = (data.buoniPasto || []).reduce((a, b) => a + ((b.tipo || 'ricevuto') === 'ricevuto' ? 1 : -1) * Number(b.amount || 0), 0);
   // buoni già usati oggi: quelli scritti nelle casse degli altri negozi + quelli già registrati oggi
   function buoniUsatiOggi(escludi) {
-    const oggi = localDateStr();
+    const oggi = dataSpesaOk; // v72: il limite si conta sul giorno della spesa
     const inCassa = casse.filter(c => c.tappa !== escludi).reduce((a, c) => a + (Number(c.buoni) || 0), 0);
     const registrati = (data.buoniPasto || []).filter(b => b.tipo === 'speso' && b.date === oggi).reduce((a, b) => a + Number(b.amount || 0), 0);
     return Math.round((inCassa + registrati) / VALORE_BUONO_PASTO * 100) / 100;
@@ -2509,9 +2530,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const righe = casseValide.map(c => `• ${c.tappa}: ${formatEuro(c.totale)}${c.buoni > 0 ? ` (di cui buoni ${formatEuro(c.buoni)})` : ''} → ${categoriaBudgetDi(c.tappa)}`).join('\n');
     const mancanti = tappeGiro.filter(t => !tappaFatta(t) && !isServizio(t));
     const avviso = mancanti.length ? `\n\nSenza totale cassa (restano in lista): ${mancanti.join(', ')}` : '';
-    const ok = await askConfirm(`Registrare nel Budget?\n\n${righe}${avviso}`);
+    const [yy, mm, dd] = dataSpesaOk.split('-');
+    const ok = await askConfirm(`Registrare nel Budget con data ${nomeGiorno} ${dd}/${mm}/${yy}?\n\n${righe}${avviso}`);
     if (!ok) return;
-    const oggi = localDateStr();
+    const oggi = dataSpesaOk; // v72: data scelta per la spesa
     const base = Date.now();
     const nuoveSpese = [];
     const nuoviBP = [];
@@ -2530,6 +2552,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     updateObj.casseSpesa = firebase.firestore.FieldValue.arrayRemove(...casseValide);
     applyUpdate(updateObj);
     setCassaDrafts({});
+    setDataSpesa(localDateStr()); // v72: dopo la registrazione la data torna a oggi
   }
   async function svuotaSenzaRegistrare() {
     const ok = await askConfirm(`Togliere i ${presi.length} prodotti già presi e i totali cassa SENZA registrarli nel Budget? L'azione non è annullabile.`);
@@ -2775,7 +2798,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               }
               if (accettaBuoni(t) && !(c && c.totale > 0)) {
                 const rest = Math.max(0, Math.floor(buoniMaxGiorno - buoniUsatiOggi(t) + 0.001));
-                return <div className="ls-buoni-info">🍱 Accetta i buoni: scrivi il totale in Cassa, i buoni si mettono da soli (oggi ne puoi usare ancora {rest})</div>;
+                return <div className="ls-buoni-info">🍱 Accetta i buoni: scrivi il totale in Cassa, i buoni si mettono da soli ({dataSpesaOk === oggiStr ? 'oggi' : `il ${dataBreve}`} ne puoi usare ancora {rest})</div>;
               }
               return null;
             })()}
@@ -2785,8 +2808,20 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       })}
 
       {casseValide.length > 0 && (
+        <div className="ls-data-spesa">
+          <div className="ls-data-titolo">📅 Data della spesa</div>
+          <div className="ls-data-riga">
+            <input type="date" className="ls-input" value={dataSpesaOk}
+              onChange={e => setDataSpesa(e.target.value || localDateStr())} />
+            <button type="button" className={`ls-chip${dataSpesaOk === oggiStr ? ' attivo' : ''}`} onClick={() => setDataSpesa(oggiStr)}>Oggi</button>
+            <button type="button" className={`ls-chip${dataSpesaOk === ieriStr ? ' attivo' : ''}`} onClick={() => setDataSpesa(ieriStr)}>Ieri</button>
+          </div>
+          <div className="ls-data-lunga">{dataLunga}</div>
+        </div>
+      )}
+      {casseValide.length > 0 && (
         <button className="btn primary ls-registra" onClick={registraSpesa}>
-          💾 Registra spesa ({formatEuro(totaleGiro)})
+          💾 Registra spesa del {dataBreve} ({formatEuro(totaleGiro)})
         </button>
       )}
       {(presi.length > 0 || casse.length > 0) && (
