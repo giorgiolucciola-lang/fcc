@@ -422,7 +422,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v68";
+const APP_VERSION = "v70";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -866,6 +866,7 @@ function App() {
     // categoria Budget e "accetta i buoni": se il doppio li aveva e quello che resta no, passano
     const cat = data.tappeCategorieBudget || {};
     const buoni = data.tappeBuoni || {};
+    const serv = data.tappeServizio || {};
     Object.keys(doppi).forEach(d => {
       const t = doppi[d];
       if (cat[d] !== undefined) {
@@ -875,6 +876,10 @@ function App() {
       if (buoni[d] !== undefined) {
         if (buoni[d] && !buoni[t]) batch.update(ref, new firebase.firestore.FieldPath('tappeBuoni', t), true);
         batch.update(ref, new firebase.firestore.FieldPath('tappeBuoni', d), FV.delete());
+      }
+      if (serv[d] !== undefined) {
+        if (serv[d] && !serv[t]) batch.update(ref, new firebase.firestore.FieldPath('tappeServizio', t), true);
+        batch.update(ref, new firebase.firestore.FieldPath('tappeServizio', d), FV.delete());
       }
     });
     // negozi ricordati per ogni prodotto
@@ -959,6 +964,12 @@ function App() {
       batch.update(ref,
         new firebase.firestore.FieldPath('tappeBuoni', nuovo), true,
         new firebase.firestore.FieldPath('tappeBuoni', vecchio), FV.delete());
+    }
+    // v69: anche il segno "commissione"
+    if ((data.tappeServizio || {})[vecchio]) {
+      batch.update(ref,
+        new firebase.firestore.FieldPath('tappeServizio', nuovo), true,
+        new firebase.firestore.FieldPath('tappeServizio', vecchio), FV.delete());
     }
     aggiungiSpostamentoNegozio(batch, ref, vecchio, nuovo);
     const mappa = data.prodottiNegozi || {};
@@ -1093,8 +1104,8 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
 
   // Elenchi di descrizioni già usate in passato, per il completamento automatico dei campi
   // (nessun dato nuovo da salvare: si riusano semplicemente le spese/entrate già registrate)
-  const descSpeseNote = Array.from(new Set((data.spese || []).map(s => s.desc).filter(Boolean)));
-  const descEntrateNote = Array.from(new Set((data.entrate || []).map(e => e.desc).filter(Boolean)));
+  const descSpeseNote = Array.from(new Set((data.spese || []).map(s => s.desc).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'it'));
+  const descEntrateNote = Array.from(new Set((data.entrate || []).map(e => e.desc).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'it'));
 
   const speseMese = (data.spese || []).filter(s => {
     const [sy, sm] = s.date.split('-').map(Number);
@@ -1193,8 +1204,6 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
 
   return (
     <div className="section active">
-      <datalist id="descSpeseList">{descSpeseNote.map(d => <option key={d} value={d} />)}</datalist>
-      <datalist id="descEntrateList">{descEntrateNote.map(d => <option key={d} value={d} />)}</datalist>
       <div className="print-title">💜 Family CC — Budget — {monthLabel(year, month)}</div>
       <div className="budget-header">
         <div className="month-nav">
@@ -1237,7 +1246,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
             <div className="form-row">
               <div className="form-group" style={{flex:2}}>
                 <label>Descrizione</label>
-                <input type="text" placeholder="Es. Stipendio" list="descEntrateList" value={formE.desc} onChange={e => setFormE(f => ({...f, desc: e.target.value}))} />
+                <AutocompleteInput autoCapitalize="sentences" placeholder="Es. Stipendio" options={descEntrateNote} value={formE.desc} onChange={val => setFormE(f => ({...f, desc: val}))} />
               </div>
               <div className="form-group">
                 <label>Importo €</label>
@@ -1281,7 +1290,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
             <div className="form-row">
               <div className="form-group" style={{flex:2}}>
                 <label>Descrizione</label>
-                <input type="text" placeholder="Es. Supermercato" list="descSpeseList" value={form.desc} onChange={e => setForm(f => ({...f, desc: e.target.value}))} />
+                <AutocompleteInput autoCapitalize="sentences" placeholder="Es. Supermercato" options={descSpeseNote} value={form.desc} onChange={val => setForm(f => ({...f, desc: val}))} />
               </div>
               <div className="form-group">
                 <label>Importo €</label>
@@ -1354,7 +1363,7 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
                     <div className="form-row">
                       <div className="form-group" style={{flex:2}}>
                         <label>Descrizione</label>
-                        <input type="text" placeholder="Descrizione" list="descSpeseList" value={editSpesaForm.desc} onChange={e => setEditSpesaForm(f => ({...f, desc: e.target.value}))} />
+                        <AutocompleteInput autoCapitalize="sentences" placeholder="Descrizione" options={descSpeseNote} value={editSpesaForm.desc} onChange={val => setEditSpesaForm(f => ({...f, desc: val}))} />
                       </div>
                       <div className="form-group">
                         <label>Importo €</label>
@@ -1690,7 +1699,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
 
   const sorted = [...pagateOrdinate, ...nonPagateUrgenti, ...nonPagateProgrammate];
   // Nomi già usati in passato per le scadenze, per il completamento automatico del campo Nome
-  const nomiScadenzeNote = Array.from(new Set((data.scadenze || []).map(s => s.nome).filter(Boolean)));
+  const nomiScadenzeNote = Array.from(new Set((data.scadenze || []).map(s => s.nome).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'it'));
 
   // ── Raggruppamento visivo per mese (v47) ──────────────────────────────────
   // Tutte le scadenze di uno stesso mese solare (pagate, scadute, da pagare o programmate,
@@ -1777,7 +1786,6 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
 
   return (
     <div className="section active">
-      <datalist id="nomeScadenzeList">{nomiScadenzeNote.map(n => <option key={n} value={n} />)}</datalist>
       <div className="print-title">💜 Family CC — Scadenze</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
         <div style={{fontSize:'17px',fontWeight:'700'}}>📅 Scadenze</div>
@@ -1820,7 +1828,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
           <div className="form-row">
             <div className="form-group" style={{flex:2}}>
               <label>Nome</label>
-              <input type="text" placeholder="Es. Affitto" list="nomeScadenzeList" value={form.nome} onChange={e => setForm(f => ({...f, nome: e.target.value}))} />
+              <AutocompleteInput autoCapitalize="sentences" placeholder="Es. Affitto" options={nomiScadenzeNote} value={form.nome} onChange={val => setForm(f => ({...f, nome: val}))} />
             </div>
             <div className="form-group">
               <label>Importo €</label>
@@ -1971,7 +1979,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               <div className="form-row">
                 <div className="form-group" style={{flex:2}}>
                   <label>Nome</label>
-                  <input type="text" placeholder="Nome" list="nomeScadenzeList" value={editForm.nome} onChange={e => setEditForm(f => ({...f, nome: e.target.value}))} />
+                  <AutocompleteInput autoCapitalize="sentences" placeholder="Nome" options={nomiScadenzeNote} value={editForm.nome} onChange={val => setEditForm(f => ({...f, nome: val}))} />
                 </div>
                 <div className="form-group">
                   <label>Importo €</label>
@@ -2228,6 +2236,9 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // così un nome scritto a metà ("Super") non diventa per errore un negozio nuovo.
   const [negNuovo, setNegNuovo] = useState('');
   const [avvisoNeg, setAvvisoNeg] = useState('');
+  // v69: un luogo nuovo creato dalla lista può essere un negozio o una commissione
+  // (Comune, lavanderia, studio…): le commissioni non hanno cassa.
+  const [nuovoServizio, setNuovoServizio] = useState(false);
   // v60: prodotto di cui è aperto il menu "Sposta in…"
   const [spostaId, setSpostaId] = useState(null);
   // v61: negozio di cui è aperto il riquadro "Sposta tutti / Rinomina" (tocco sull'intestazione)
@@ -2293,8 +2304,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       tappa = testoNeg;
       if (data.tappeLista && data.tappeLista.length) applyUpdate({ tappeLista: firebase.firestore.FieldValue.arrayUnion(tappa) });
       else applyUpdate({ tappeLista: [...DEFAULT_TAPPE, tappa] });
+      if (nuovoServizio) aggiornaVoceMappa('tappeServizio', tappa, true);
     }
     setNegNuovo('');
+    setNuovoServizio(false);
     setAvvisoNeg('');
     const item = { id: Date.now(), nome: nomeTrim, qta: form.qta.trim(), tappa, checked: false };
     addItems('listaSpesa', [item]);
@@ -2395,12 +2408,14 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const vecchia = cassaDi(t);
     let totale = parseNumIT(d.totale !== undefined ? d.totale : (vecchia ? String(vecchia.totale) : '')) || 0;
     let buoni = parseNumIT(d.buoni !== undefined ? d.buoni : (vecchia ? String(vecchia.buoni || '') : '')) || 0;
+    // v70: le commissioni hanno solo la Cassa, mai i buoni pasto
+    if (isServizio(t)) buoni = 0;
     // v65: negozio che accetta i buoni → quando si scrive la cassa per la prima volta e il
     // campo buoni è vuoto, l'app propone i buoni interi che ci stanno (rispettando il limite
     // giornaliero e i buoni disponibili). Il valore resta modificabile a mano.
     const primaCassa = !vecchia || !(vecchia.totale > 0);
     const buoniNonScritti = d.buoni === undefined || String(d.buoni).trim() === '';
-    if (accettaBuoni(t) && primaCassa && buoniNonScritti && totale > 0 && buoni <= 0) {
+    if (accettaBuoni(t) && !isServizio(t) && primaCassa && buoniNonScritti && totale > 0 && buoni <= 0) {
       buoni = buoniProposti(t, totale) * VALORE_BUONO_PASTO;
     }
     // v58: spesa pagata tutta con i buoni → se la cassa è vuota si riempie con lo stesso importo
@@ -2421,6 +2436,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   // ── Categoria Budget di ogni negozio (impostabile in Impostazioni) ──
   // ── Buoni pasto (v65) ──
   function accettaBuoni(t) { return !!(data.tappeBuoni || {})[t]; }
+  // v69: commissione = luogo senza cassa (Comune, lavanderia, studio professionale…)
+  function isServizio(t) { return !!(data.tappeServizio || {})[t]; }
   const buoniMaxGiorno = Number(data.buoniMaxGiorno != null ? data.buoniMaxGiorno : DEFAULT_BUONI_MAX_GIORNO);
   const saldoBuoni = (data.buoniPasto || []).reduce((a, b) => a + ((b.tipo || 'ricevuto') === 'ricevuto' ? 1 : -1) * Number(b.amount || 0), 0);
   // buoni già usati oggi: quelli scritti nelle casse degli altri negozi + quelli già registrati oggi
@@ -2450,7 +2467,16 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   ];
   // v57: le tappe di oggi sono numerate in modo consecutivo (1, 2, 3…) seguendo l'ordine
   // di Impostazioni, saltando i negozi senza prodotti.
-  const tappaFatta = t => { const c = cassaDi(t); return !!(c && c.totale > 0); };
+  // v69: una commissione è fatta quando tutte le sue voci sono spuntate
+  // v70: …oppure quando ha un importo in Cassa (studio medico, avvocato…)
+  const tappaFatta = t => {
+    const c = cassaDi(t);
+    if (isServizio(t)) {
+      if (c && c.totale > 0) return true;
+      const v = lista.filter(i => (i.tappa || 'Altro') === t); return v.length > 0 && v.every(i => i.checked);
+    }
+    return !!(c && c.totale > 0);
+  };
   const numFatte = tappeGiro.filter(tappaFatta).length;
   const giroCompleto = tappeGiro.length > 0 && numFatte === tappeGiro.length;
   const totaleGiro = casse.reduce((a, c) => a + (Number(c.totale) || 0), 0);
@@ -2465,7 +2491,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   async function registraSpesa() {
     if (!casseValide.length) return;
     const righe = casseValide.map(c => `• ${c.tappa}: ${formatEuro(c.totale)}${c.buoni > 0 ? ` (di cui buoni ${formatEuro(c.buoni)})` : ''} → ${categoriaBudgetDi(c.tappa)}`).join('\n');
-    const mancanti = tappeGiro.filter(t => !tappaFatta(t));
+    const mancanti = tappeGiro.filter(t => !tappaFatta(t) && !isServizio(t));
     const avviso = mancanti.length ? `\n\nSenza totale cassa (restano in lista): ${mancanti.join(', ')}` : '';
     const ok = await askConfirm(`Registrare nel Budget?\n\n${righe}${avviso}`);
     if (!ok) return;
@@ -2480,7 +2506,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       if (buoni > 0) nuoviBP.push({ id: base + 500 + idx, tipo: 'speso', desc: `Spesa – ${c.tappa}`, qty: Math.round(buoni / VALORE_BUONO_PASTO * 100) / 100, amount: Math.round(buoni * 100) / 100, date: oggi });
     });
     const negoziChiusi = new Set(casseValide.map(c => c.tappa));
-    const daTogliere = presi.filter(i => negoziChiusi.has(i.tappa || 'Altro'));
+    const daTogliere = presi.filter(i => negoziChiusi.has(i.tappa || 'Altro') || isServizio(i.tappa));
     const updateObj = {};
     if (nuoveSpese.length) updateObj.spese = firebase.firestore.FieldValue.arrayUnion(...nuoveSpese);
     if (nuoviBP.length) updateObj.buoniPasto = firebase.firestore.FieldValue.arrayUnion(...nuoviBP);
@@ -2535,12 +2561,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         <div className={`ls-tappe${giroCompleto ? ' completo' : ''}`}>
           <div className="ls-tappe-head">
             <span>{giroCompleto ? '✅ Tappe completate' : '📍 Tappe'}</span>
-            <span>{giroCompleto ? `Totale ${formatEuro(totaleGiro)}` : `${numFatte} di ${tappeGiro.length} fatte`}</span>
+            <span>{giroCompleto ? (totaleGiro > 0 ? `Totale ${formatEuro(totaleGiro)}` : '') : `${numFatte} di ${tappeGiro.length} fatte`}</span>
           </div>
           {!giroCompleto && (
             <div className="ls-chips">
               {tappeGiro.map((t, n) => (
-                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{n + 1}. {t}</button>
+                <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{n + 1}. {isServizio(t) ? '🏛️ ' : ''}{t}</button>
               ))}
             </div>
           )}
@@ -2554,7 +2580,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         <AutocompleteInput
           className="ls-input"
           autoCapitalize="sentences"
-          placeholder="Prodotto"
+          placeholder="Prodotto / cosa fare"
           value={form.nome}
           options={prodottiNote}
           onChange={val => {
@@ -2573,12 +2599,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             <AutocompleteInput
               className="ls-input"
               autoCapitalize="words"
-              placeholder="Negozio"
+              placeholder="Negozio / luogo"
               value={form.tappa}
               options={tappaList}
               onChange={val => { setForm(f => ({ ...f, tappa: val })); setAvvisoNeg(''); }}
-              onCrea={val => { setForm(f => ({ ...f, tappa: val })); setNegNuovo(val); setAvvisoNeg(`"${val}" verrà aggiunto anche ai negozi in Impostazioni`); }}
-              creaLabel={val => `➕ Crea negozio "${val}"`}
+              onCrea={val => { setForm(f => ({ ...f, tappa: val })); setNegNuovo(val); setNuovoServizio(false); setAvvisoNeg(`"${val}" verrà aggiunto anche ai luoghi in Impostazioni`); }}
+              creaLabel={val => `➕ Crea "${val}"`}
               onEnter={add}
             />
           </div>
@@ -2597,6 +2623,13 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
           );
         })()}
         {avvisoNeg && <div style={{fontSize:'14px',fontWeight:600,color:'#b35c00'}}>{avvisoNeg}</div>}
+        {negNuovo && negNuovo === (form.tappa || '').normalize('NFC').trim().replace(/\s+/g, ' ') && (
+          <div className="ls-sugg">
+            <span className="ls-sposta-label">"{negNuovo}" è:</span>
+            <button className={`ls-chip${!nuovoServizio ? ' attivo' : ''}`} onClick={() => setNuovoServizio(false)}>🛒 Negozio</button>
+            <button className={`ls-chip${nuovoServizio ? ' attivo' : ''}`} onClick={() => setNuovoServizio(true)}>🏛️ Commissione (senza buoni)</button>
+          </div>
+        )}
       </div>
 
       {lista.length === 0 && casse.length === 0 && <div className="empty">Lista vuota — scrivi un prodotto qui sopra</div>}
@@ -2607,6 +2640,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         const daPrendere = prodotti.filter(i => !i.checked);
         const giaPresi = prodotti.filter(i => i.checked);
         const fatta = tappaFatta(t);
+        const servizio = isServizio(t);
         return (
           <div key={t} id={'negozio-' + t} className={`ls-negozio${fatta ? ' fatto' : ''}`}>
             {/* v67: riquadro con il numero della tappa davanti al nome: si scrive un numero e il
@@ -2622,10 +2656,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
                   onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
               )}
               <button type="button" className="ls-negozio-nome" onClick={() => apriNegMenu(t)} aria-label={`Sposta o rinomina ${t}`}>
-                {fatta ? '✓ ' : ''}{pos < 0 ? `${tappeGiro.indexOf(t) + 1}. ` : ''}{t} <span className="ls-negozio-mod">{negMenu === t ? '▲' : '✏️'}</span>
+                {fatta ? '✓ ' : ''}{pos < 0 ? `${tappeGiro.indexOf(t) + 1}. ` : ''}{servizio ? '🏛️ ' : ''}{t} <span className="ls-negozio-mod">{negMenu === t ? '▲' : '✏️'}</span>
               </button>
               <span className="ls-negozio-count">
-                {fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso')}
+                {servizio
+                  ? (cassaDi(t) && cassaDi(t).totale > 0 ? formatEuro(cassaDi(t).totale) : (fatta ? 'fatta' : `${daPrendere.length} da fare`))
+                  : (fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso'))}
               </span>
             </div>
             {negMenu === t && (
@@ -2659,6 +2695,28 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             )}
             {daPrendere.map(renderItem)}
             {giaPresi.map(renderItem)}
+            {servizio ? (<>
+              {/* v70: commissione con solo la Cassa (niente buoni). Con un importo va nel Budget
+                  con "Registra spesa", nella categoria del luogo; senza importo basta spuntare. */}
+              <div className="ls-cassa">
+                <label style={{flex:'0 1 50%'}}>
+                  <span>Pagato € <span style={{fontWeight:400}}>(se si paga)</span></span>
+                  <input type="text" inputMode="decimal" placeholder="0,00" className="ls-input"
+                    value={cassaVal(t, 'totale')}
+                    onChange={e => setCassaDraft(t, 'totale', e.target.value)}
+                    onBlur={() => commitCassa(t)}
+                    onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+                </label>
+              </div>
+              {fatta && !(cassaDi(t) && cassaDi(t).totale > 0) && (
+                <div style={{textAlign:'right',marginTop:'8px'}}>
+                  <button className="btn small"
+                    onClick={() => applyUpdate({ listaSpesa: firebase.firestore.FieldValue.arrayRemove(...giaPresi) })}>
+                    ✓ Fatto — togli dalla lista
+                  </button>
+                </div>
+              )}
+            </>) : (<>
             <div className="ls-cassa">
               <label>
                 <span>Cassa €</span>
@@ -2692,6 +2750,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               }
               return null;
             })()}
+            </>)}
           </div>
         );
       })}
@@ -3056,6 +3115,12 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
   const [editTappaVal, setEditTappaVal] = useState('');
   const [avvisoTappa, setAvvisoTappa] = useState('');
   // v65: buoni pasto per negozio e limite giornaliero
+  // v69: luoghi "commissione" (senza cassa): Comune, lavanderia, studi professionali…
+  function toggleServizioNegozio(t) {
+    const mappa = { ...(data.tappeServizio || {}) };
+    if (mappa[t]) delete mappa[t]; else mappa[t] = true;
+    saveData({ tappeServizio: mappa });
+  }
   function toggleBuoniNegozio(t) {
     const mappa = { ...(data.tappeBuoni || {}) };
     if (mappa[t]) delete mappa[t]; else mappa[t] = true;
@@ -3281,6 +3346,24 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
           <div className="form-row" style={{marginTop:'10px'}}>
             <input type="text" placeholder="Nuovo negozio..." value={newTappa} onChange={e => setNewTappa(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTappa()} style={{flex:1}} />
             <button className="btn primary" onClick={addTappa}>Aggiungi</button>
+          </div>
+
+          {/* v69: commissioni (v70: con il solo campo Pagato €, senza buoni) */}
+          <div className="setting-label" style={{marginTop:'22px'}}>🏛️ Commissioni (Comune, studi, lavanderia…)</div>
+          <div style={{fontSize:'14px',color:'var(--text)',marginBottom:'10px',lineHeight:'1.5'}}>
+            Tocca i luoghi dove non compri prodotti ma vai a fare una commissione (Comune, lavanderia, studio professionale…). Nella Lista della Spesa avranno solo il campo "Pagato €", senza buoni pasto. Se scrivi un importo (es. visita dal medico), con "Registra spesa" finisce nel Budget nella categoria scelta qui sopra per quel luogo (es. Salute). Se non paghi nulla, la tappa è fatta quando hai spuntato tutte le voci.
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'14px'}}>
+            {(data.tappeLista || DEFAULT_TAPPE).map((t, i) => {
+              const on = !!(data.tappeServizio || {})[t];
+              return (
+                <button key={t + '|' + i} type="button" onClick={() => toggleServizioNegozio(t)}
+                  style={{fontFamily:'inherit',fontSize:'15px',fontWeight:on ? 700 : 500,padding:'8px 14px',borderRadius:'20px',cursor:'pointer',
+                    background:on ? 'var(--accent)' : '#fff',color:on ? '#fff' : 'var(--text)',border:'2px solid ' + (on ? 'var(--accent)' : 'var(--border2)')}}>
+                  {on ? '🏛️ ' : ''}{t}
+                </button>
+              );
+            })}
           </div>
 
           {/* v65: negozi dove si pagano i buoni pasto + limite giornaliero */}
