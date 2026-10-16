@@ -2700,7 +2700,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
                   con "Registra spesa", nella categoria del luogo; senza importo basta spuntare. */}
               <div className="ls-cassa">
                 <label style={{flex:'0 1 50%'}}>
-                  <span>Pagato € <span style={{fontWeight:400}}>(se si paga)</span></span>
+                  <span>Cassa €</span>
                   <input type="text" inputMode="decimal" placeholder="0,00" className="ls-input"
                     value={cassaVal(t, 'totale')}
                     onChange={e => setCassaDraft(t, 'totale', e.target.value)}
@@ -3348,10 +3348,10 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
             <button className="btn primary" onClick={addTappa}>Aggiungi</button>
           </div>
 
-          {/* v69: commissioni (v70: con il solo campo Pagato €, senza buoni) */}
+          {/* v69: commissioni (v70: con il solo campo Cassa €, senza buoni) */}
           <div className="setting-label" style={{marginTop:'22px'}}>🏛️ Commissioni (Comune, studi, lavanderia…)</div>
           <div style={{fontSize:'14px',color:'var(--text)',marginBottom:'10px',lineHeight:'1.5'}}>
-            Tocca i luoghi dove non compri prodotti ma vai a fare una commissione (Comune, lavanderia, studio professionale…). Nella Lista della Spesa avranno solo il campo "Pagato €", senza buoni pasto. Se scrivi un importo (es. visita dal medico), con "Registra spesa" finisce nel Budget nella categoria scelta qui sopra per quel luogo (es. Salute). Se non paghi nulla, la tappa è fatta quando hai spuntato tutte le voci.
+            Tocca i luoghi dove non compri prodotti ma vai a fare una commissione (Comune, lavanderia, studio professionale…). Nella Lista della Spesa avranno solo il campo "Cassa €", senza buoni pasto. Se scrivi un importo (es. visita dal medico), con "Registra spesa" finisce nel Budget nella categoria scelta qui sopra per quel luogo (es. Salute). Se non paghi nulla, la tappa è fatta quando hai spuntato tutte le voci.
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'14px'}}>
             {(data.tappeLista || DEFAULT_TAPPE).map((t, i) => {
