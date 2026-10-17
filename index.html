@@ -428,7 +428,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v74";
+const APP_VERSION = "v75";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -2338,7 +2338,11 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       || lista.map(i => i.tappa).find(t => t && chiaveNegozio(t) === chiaveNegozio(testoNeg));
     if (!tappa) {
       if (negNuovo !== testoNeg) {
-        setAvvisoNeg(`"${testoNeg}" non è tra i tuoi negozi: sceglilo dall'elenco oppure tocca "➕ Crea negozio"`);
+        // v75: il primo ＋ su un nome nuovo prepara la creazione (scelta Negozio/Commissione),
+        // il secondo ＋ lo crea. Prima serviva la voce "➕ Crea" del menu, che spariva.
+        setNegNuovo(testoNeg);
+        setNuovoServizio(false);
+        setAvvisoNeg(`"${testoNeg}" è un luogo nuovo: scegli qui sotto se è un negozio o una commissione, poi tocca di nuovo ＋ per crearlo`);
         return;
       }
       // negozio nuovo confermato: si aggiunge anche in Impostazioni (in fondo al giro)
