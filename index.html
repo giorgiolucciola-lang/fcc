@@ -293,6 +293,7 @@ input.ls-pos[type=text]:focus { background: var(--accent-light); border-color: v
 .ls-negmenu-tit { font-size: 15px; font-weight: 700; color: var(--accent-dark); margin-top: 4px; }
 .ls-buoni-info { font-size: 14px; font-weight: 600; color: var(--text); background: var(--salmon-bg, #fff4ef); border: 1px solid var(--salmon-border, #f2c2ad); border-radius: 8px; padding: 6px 10px; margin-top: 8px; }
 .ls-negmenu-avviso { font-size: 13px; font-weight: 600; color: var(--orange); }
+.ls-solo-tappa { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 2px; font-size: 15px; font-weight: 600; color: var(--text); }
 .ls-negozio-count { font-size: 14px; font-weight: 600; color: var(--text2); white-space: nowrap; }
 .ls-negozio.fatto .ls-negozio-count { color: #0e7a3d; }
 .ls-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); min-height: 54px; }
@@ -427,7 +428,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v73";
+const APP_VERSION = "v74";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -921,6 +922,11 @@ function App() {
         : { ...cassaDa, tappa: a };
       batch.update(ref, { casseSpesa: FV.arrayRemove(...daTogliere) });
       batch.update(ref, { casseSpesa: FV.arrayUnion(nuova) });
+    }
+    // v74: anche una tappa senza prodotti segue il nuovo nome
+    if ((data.tappeGiorno || []).includes(da)) {
+      batch.update(ref, { tappeGiorno: FV.arrayRemove(da) });
+      batch.update(ref, { tappeGiorno: FV.arrayUnion(a) });
     }
     return prodotti;
   }
@@ -2321,10 +2327,12 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
 
   function cassaDi(t) { return casse.find(c => c.tappa === t); }
 
+  // v74: tappe aggiunte senza prodotti (es. "Calzolaio": solo il negozio, niente Prodotto/Qtà)
+  const tappeSole = data.tappeGiorno || [];
   function add() {
     const nomeTrim = nomeProdotto(form.nome);
-    if (!nomeTrim) return;
     const testoNeg = (form.tappa || '').normalize('NFC').trim().replace(/\s+/g, ' ');
+    if (!nomeTrim && !testoNeg) return;
     if (!testoNeg) { setAvvisoNeg('Scrivi o scegli il negozio'); return; }
     let tappa = tappaList.find(t => chiaveNegozio(t) === chiaveNegozio(testoNeg))
       || lista.map(i => i.tappa).find(t => t && chiaveNegozio(t) === chiaveNegozio(testoNeg));
@@ -2342,7 +2350,15 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     setNegNuovo('');
     setNuovoServizio(false);
     setAvvisoNeg('');
-    const item = { id: Date.now(), nome: nomeTrim, qta: form.qta.trim(), tappa, checked: false };
+    try { localStorage.setItem('fcc-ultimo-negozio', tappa); } catch (e) {}
+    if (!nomeTrim) {
+      // v74: solo la tappa, senza prodotti
+      if (tappeGiro.includes(tappa)) { setAvvisoNeg(`"${tappa}" è già tra le tappe`); setForm(f => ({ ...f, qta: '', tappa })); return; }
+      applyUpdate({ tappeGiorno: firebase.firestore.FieldValue.arrayUnion(tappa) });
+      setForm({ nome: '', qta: '', tappa });
+      return;
+    }
+    const item ={ id: Date.now(), nome: nomeTrim, qta: form.qta.trim(), tappa, checked: false };
     addItems('listaSpesa', [item]);
     if (!(data.storicoProdotti || []).some(n => (n || '').toLowerCase() === nomeTrim.toLowerCase())) addItems('storicoProdotti', [nomeTrim]);
     ricordaNegozio(nomeTrim, tappa);
@@ -2510,7 +2526,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   }
 
   // ── Tappe del giro: negozi con prodotti in lista o con uno scontrino inserito ──
-  const negoziUsati = new Set([...lista.map(i => i.tappa || 'Altro'), ...casse.map(c => c.tappa)]);
+  const negoziUsati = new Set([...lista.map(i => i.tappa || 'Altro'), ...casse.map(c => c.tappa), ...tappeSole]);
   const tappeGiro = [
     ...tappaList.filter(t => negoziUsati.has(t)),
     ...Array.from(negoziUsati).filter(t => !tappaList.includes(t)),
@@ -2575,6 +2591,9 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (nuoviBP.length) updateObj.buoniPasto = firebase.firestore.FieldValue.arrayUnion(...nuoviBP);
     if (daTogliere.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...daTogliere);
     updateObj.casseSpesa = firebase.firestore.FieldValue.arrayRemove(...casseValide);
+    // v74: le tappe senza prodotti registrate escono dal giro
+    const tappeChiuse = tappeSole.filter(t => negoziChiusi.has(t));
+    if (tappeChiuse.length) updateObj.tappeGiorno = firebase.firestore.FieldValue.arrayRemove(...tappeChiuse);
     applyUpdate(updateObj);
     setCassaDrafts({});
     setDateNegozi({}); // v73: dopo la registrazione le date tornano a oggi
@@ -2585,6 +2604,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const updateObj = {};
     if (presi.length) updateObj.listaSpesa = firebase.firestore.FieldValue.arrayRemove(...presi);
     if (casse.length) updateObj.casseSpesa = firebase.firestore.FieldValue.arrayRemove(...casse);
+    const tappeConCassa = tappeSole.filter(t => casse.some(c => c.tappa === t));
+    if (tappeConCassa.length) updateObj.tappeGiorno = firebase.firestore.FieldValue.arrayRemove(...tappeConCassa);
     applyUpdate(updateObj);
     setCassaDrafts({});
   }
@@ -2696,7 +2717,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         )}
       </div>
 
-      {lista.length === 0 && casse.length === 0 && <div className="empty">Lista vuota — scrivi un prodotto qui sopra</div>}
+      {lista.length === 0 && casse.length === 0 && tappeSole.length === 0 && <div className="empty">Lista vuota — scrivi un prodotto qui sopra</div>}
 
       {tappeGiro.map(t => {
         const pos = tappaList.indexOf(t);
@@ -2724,8 +2745,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               </button>
               <span className="ls-negozio-count">
                 {servizio
-                  ? (cassaDi(t) && cassaDi(t).totale > 0 ? formatEuro(cassaDi(t).totale) : (fatta ? 'fatta' : `${daPrendere.length} da fare`))
-                  : (fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : 'tutto preso'))}
+                  ? (cassaDi(t) && cassaDi(t).totale > 0 ? formatEuro(cassaDi(t).totale) : (fatta ? 'fatta' : (prodotti.length ? `${daPrendere.length} da fare` : 'da fare')))
+                  : (fatta ? formatEuro(cassaDi(t).totale) : (daPrendere.length ? `${daPrendere.length} da prendere` : (prodotti.length ? 'tutto preso' : 'da fare')))}
               </span>
             </div>
             {negMenu === t && (
@@ -2759,6 +2780,15 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             )}
             {daPrendere.map(renderItem)}
             {giaPresi.map(renderItem)}
+            {/* v74: tappa senza prodotti: si toglie a mano se non serve più (con importo si chiude con "Registra spesa") */}
+            {prodotti.length === 0 && !(cassaDi(t) && cassaDi(t).totale > 0) && tappeSole.includes(t) && (
+              <div className="ls-solo-tappa">
+                <span>Tappa senza prodotti{servizio ? '' : ': scrivi il totale in Cassa'}</span>
+                <button className="btn small" onClick={() => applyUpdate({ tappeGiorno: firebase.firestore.FieldValue.arrayRemove(t) })}>
+                  {servizio ? '✓ Fatto — togli' : '✕ Togli tappa'}
+                </button>
+              </div>
+            )}
             {servizio ? (<>
               {/* v70: commissione con solo la Cassa (niente buoni). Con un importo va nel Budget
                   con "Registra spesa", nella categoria del luogo; senza importo basta spuntare. */}
