@@ -277,9 +277,10 @@ select:required:valid:not(:focus) {
 .ls-negozio.fatto { border-color: var(--green-border); background: #fbfefc; }
 .ls-negozio-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: var(--accent-dark); padding: 6px 0; border-bottom: 1px solid var(--border); }
 .ls-negozio.fatto .ls-negozio-head { color: #0e7a3d; }
+.ls-negozio.fatto .ls-negozio-nome { color: #0e7a3d; } /* v76: negozio completato resta verde */
 .ls-negozio-head-btn { width: 100%; background: none; border: none; border-bottom: 1px solid var(--border); font-family: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 /* v67: riquadro numerico della tappa davanti al nome del negozio */
-.ls-negozio-nome { flex: 1; min-width: 0; background: none; border: none; padding: 8px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; -webkit-tap-highlight-color: transparent; }
+.ls-negozio-nome { flex: 1; min-width: 0; background: none; border: none; padding: 8px 0; font: inherit; color: #b5600b; /* v76: nome negozio color ocra/arancio */ text-align: left; cursor: pointer; overflow-wrap: anywhere; -webkit-tap-highlight-color: transparent; }
 input.ls-pos[type=text], input.ls-pos[type=text]:not(:placeholder-shown):not(:focus) { width: 48px; flex: 0 0 48px; height: 44px; padding: 0; font-size: 19px; font-weight: 700; text-align: center; color: var(--accent-dark); background: #fff; border: 2px solid var(--accent); border-radius: 9px; }
 input.ls-pos[type=text]:focus { background: var(--accent-light); border-color: var(--accent-dark); }
 .ls-negozio.fatto input.ls-pos[type=text]:not(:focus) { border-color: var(--green); color: #0e7a3d; }
@@ -428,7 +429,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v75";
+const APP_VERSION = "v76";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
