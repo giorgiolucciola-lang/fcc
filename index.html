@@ -266,7 +266,20 @@ select:required:valid:not(:focus) {
 .ls-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .ls-chip { font-family: inherit; cursor: pointer; font-size: 15px; padding: 6px 12px; border-radius: 8px; background: #fff; border: 1px solid var(--giallo-border); color: var(--text); }
 .ls-chip.fatta { background: var(--green-bg); border-color: var(--green-border); color: #0e7a3d; font-weight: 600; }
-.ls-add { background: var(--accent-light); border: 1px solid var(--border2); border-radius: 12px; padding: 10px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+/* v78: riquadro di inserimento in azzurro, nettamente diverso dai negozi (bianchi) e dalle Tappe (gialle) */
+.ls-add { background: #d4e6fa; border: 2px solid var(--blue); border-radius: 12px; padding: 10px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+.ls-add-titolo { font-size: 15px; font-weight: 700; color: #1d5fa8; }
+.ls-add input.ls-input[type=text]:not(:focus) { border-color: #8db8e6; }
+/* v78: il ＋ lampeggia quando Prodotto e Negozio sono compilati */
+@keyframes ls-lampeggia { 0%, 100% { background: var(--green); border-color: var(--green); box-shadow: 0 0 0 0 rgba(22,196,98,0.6); } 50% { background: #0e9a4b; border-color: #0e9a4b; box-shadow: 0 0 0 7px rgba(22,196,98,0); } }
+.btn.primary.ls-add-btn.pronto { animation: ls-lampeggia 1s ease-in-out infinite; }
+/* v78: riordino delle tappe direttamente nel riquadro Tappe */
+.ls-tappe-ordina { font-family: inherit; font-size: 14px; font-weight: 700; padding: 6px 12px; border-radius: 8px; cursor: pointer; background: #fff; border: 1.5px solid #8a6a00; color: #8a6a00; }
+.ls-tappe-ordina.attivo { background: #8a6a00; color: #fff; }
+.ls-ord-riga { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--giallo-border); border-radius: 8px; padding: 4px 6px 4px 10px; margin-top: 6px; }
+.ls-ord-nome { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.ls-ord-btn { width: 46px; height: 42px; flex-shrink: 0; font-size: 20px; font-weight: 700; border-radius: 8px; border: 1.5px solid var(--accent); background: var(--accent-light); color: var(--accent-dark); cursor: pointer; padding: 0; font-family: inherit; }
+.ls-ord-btn:disabled { opacity: 0.25; cursor: default; }
 .ls-add-row { display: flex; gap: 8px; }
 .ls-input, input.ls-input[type=text], select.ls-input { font-size: 17px; padding: 10px 10px; min-height: 46px; }
 .ls-add-qta { width: 90px !important; flex-shrink: 0; }
@@ -429,7 +442,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v77";
+const APP_VERSION = "v78";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -1441,6 +1454,10 @@ function BudgetTab({ data, saveData, addItems, removeItems, updateItem, askConfi
                       ? <span style={{color:'var(--green)',fontWeight:600}}>✓ Pagata</span>
                       : <span style={{color:'var(--orange)',fontWeight:600}}>Da pagare</span>}
                   </div>
+                  {/* v78: importo a zero (o mai scritto): si corregge in Scadenze con ✏️ */}
+                  {!(Number(sc.amount) > 0) && (
+                    <div style={{fontSize:'13px',fontWeight:700,color:'var(--red)',marginTop:'2px'}}>⚠️ Importo mancante: correggilo in Scadenze con ✏️</div>
+                  )}
                 </div>
                 <div className="spesa-amount">{formatEuro(sc.amount)}</div>
               </div>
@@ -1462,7 +1479,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     setShow(true);
     setTimeout(() => { if (formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
   }
-  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false, tolleranza: '' });
+  const [form, setForm] = useState({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false, tolleranza: '', dataPagamento: '' });
   const [editId, setEditId] = useState(null);
   // tipo/unita/intervallo/fineMese servono per CORREGGERE la frequenza di un gruppo
   // ricorrente creato per errore (es. scelto "ogni mese" invece di "ogni 3 mesi")
@@ -1473,6 +1490,8 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
   // se la si registra qualche giorno dopo la scadenza effettiva.
   const [payDateId, setPayDateId] = useState(null);
   const [payDate, setPayDate] = useState('');
+  // v78: nello stesso riquadro si vede (e si corregge) anche la data di scadenza
+  const [payScad, setPayScad] = useState('');
 
   function add() {
     if (!form.nome || !form.date) return;
@@ -1491,7 +1510,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       nome: form.nome,
       amount: importoIT(form.amount),
       date: dataIniziale,
-      pagato: false,
+      // v78: se è già pagata si scrive subito la data di pagamento (per le ricorrenti vale solo la prima)
+      pagato: /^\d{4}-\d{2}-\d{2}$/.test(form.dataPagamento || ''),
+      ...(/^\d{4}-\d{2}-\d{2}$/.test(form.dataPagamento || '') ? { dataPagamento: form.dataPagamento } : {}),
       ricorrente,
       unitaRicorrenza: ricorrente ? form.unita : null,
       intervalloValore: ricorrente ? Number(form.intervallo || 1) : null,
@@ -1506,7 +1527,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       nuove = nuove.concat(generaOccorrenze(base, 12));
     }
     addItems('scadenze', nuove);
-    setForm({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false, tolleranza: '' });
+    setForm({ nome: '', amount: '', date: '', tipo: 'singola', unita: 'mesi', intervallo: '1', fineMese: false, numera: false, tolleranza: '', dataPagamento: '' });
     setShow(false);
   }
   // Apre il riquadro "conferma pagamento" (con data odierna precompilata) quando si segna
@@ -1520,22 +1541,27 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       return;
     }
     setPayDate(localDateStr());
+    setPayScad(item.date);
     setPayDateId(item.id);
   }
   function confermaPagamento(item) {
-    updateItem('scadenze', item, { ...item, pagato: true, dataPagamento: payDate || localDateStr(), riaperta: false });
+    const nuovaScad = /^\d{4}-\d{2}-\d{2}$/.test(payScad || '') ? payScad : item.date;
+    updateItem('scadenze', item, { ...item, date: nuovaScad, pagato: true, dataPagamento: payDate || localDateStr(), riaperta: false });
     setPayDateId(null);
     setPayDate('');
+    setPayScad('');
   }
   function annullaPagamento() {
     setPayDateId(null);
     setPayDate('');
+    setPayScad('');
   }
   // Apre lo stesso riquadro "conferma pagamento" ma per CORREGGERE la data di una
   // scadenza già segnata come pagata, precompilando la data attualmente salvata
   // (invece di oggi). Non serve riaprire e richiudere la scadenza.
   function correggiDataPagamento(item) {
     setPayDate(item.dataPagamento || localDateStr());
+    setPayScad(item.date);
     setPayDateId(item.id);
   }
   // Attiva/disattiva le notifiche prioritarie (avvisi ripetuti ogni tot ore) per questa
@@ -1650,6 +1676,8 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
       // (utile se in fase di creazione/generazione era sbagliato): un campo vuoto
       // lascia la numerazione come prima, un numero valido la sovrascrive.
       const rataNumCorretto = editForm.rataNum !== '' ? Number(editForm.rataNum) : s.rataNum;
+      // v78: la data di pagamento si può scrivere anche su una rata da pagare: così diventa pagata
+      const dpValida = /^\d{4}-\d{2}-\d{2}$/.test(editForm.dataPagamento || '');
       const newItem = {
         ...s,
         nome: editForm.nome,
@@ -1660,7 +1688,8 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
         tolleranzaGiorni: Number(editForm.tolleranza || 0),
         // Data di pagamento correggibile qui solo se la rata è già pagata (altrimenti
         // non ha senso salvarne una: una rata "da pagare" non ha una data di pagamento)
-        dataPagamento: s.pagato ? (editForm.dataPagamento || s.dataPagamento) : s.dataPagamento,
+        dataPagamento: dpValida ? editForm.dataPagamento : s.dataPagamento,
+        ...(dpValida && !s.pagato ? { pagato: true, riaperta: false } : {}),
       };
       await updateItem('scadenze', s, newItem);
     }
@@ -1730,7 +1759,8 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
     if (!gruppiPerMese[chiaveMese]) gruppiPerMese[chiaveMese] = [];
     gruppiPerMese[chiaveMese].push(s);
   }
-  const mesiOrdinati = Object.keys(gruppiPerMese).sort();
+  // v78: mesi dal più recente (in alto) al più vecchio (in fondo)
+  const mesiOrdinati = Object.keys(gruppiPerMese).sort((a, b) => b.localeCompare(a));
   for (const chiave of mesiOrdinati) {
     gruppiPerMese[chiave].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'it', { numeric: true, sensitivity: 'base' }));
   }
@@ -1852,6 +1882,10 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               <label>Data {form.tipo === 'singola' ? 'scadenza' : 'prima scadenza'}</label>
               <input type="date" value={form.date} onChange={e => setForm(f => ({...f, date: e.target.value}))} />
             </div>
+            <div className="form-group">
+              <label>Data pagamento (se già pagata)</label>
+              <input type="date" value={form.dataPagamento} onChange={e => setForm(f => ({...f, dataPagamento: e.target.value}))} />
+            </div>
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -1961,7 +1995,7 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               </div>
             </div>
             <div className="scad-actions">
-              <div className="scad-amount">{s.amount ? formatEuro(s.amount) : ''}</div>
+              <div className="scad-amount">{Number(s.amount) > 0 ? formatEuro(s.amount) : <span style={{color:'var(--red)',fontSize:'13px'}}>⚠️ Importo mancante</span>}</div>
               <button className="btn small" style={{background:st.bg,borderColor:st.border,color:st.color}} onClick={() => togglePagato(s)}>{s.pagato ? '↩️ Riapri' : st.label}</button>
               <button
                 className="btn small"
@@ -1978,9 +2012,15 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
               <span style={{fontSize:'13px',color:'var(--text2)',flex:'1 1 140px'}}>
                 {s.pagato ? <>Correggi la data di pagamento di <strong>{s.nome}</strong></> : <>Quando è stata pagata <strong>{s.nome}</strong>?</>}
               </span>
-              <div className="form-group" style={{maxWidth:'160px'}}>
-                <label>Data pagamento</label>
-                <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+              <div className="form-row" style={{flex:'1 1 100%',marginBottom:0}}>
+                <div className="form-group">
+                  <label>Data scadenza</label>
+                  <input type="date" value={payScad} onChange={e => setPayScad(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Data pagamento</label>
+                  <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                </div>
               </div>
               <button className="btn primary small" onClick={() => confermaPagamento(s)}>✓ {s.pagato ? 'Salva' : 'Conferma'}</button>
               <button className="btn small" onClick={annullaPagamento}>✕ Annulla</button>
@@ -2003,9 +2043,9 @@ function ScadenzeTab({ data, saveData, addItems, removeItems, updateItem, askCon
                   <label>Data scadenza{editScope === 'gruppo' ? ' (di questa rata, usata come base per rigenerare le successive)' : ''}</label>
                   <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date: e.target.value}))} />
                 </div>
-                {s.pagato && editScope === 'singola' && (
+                {editScope === 'singola' && (
                   <div className="form-group">
-                    <label>Data pagamento</label>
+                    <label>Data pagamento{s.pagato ? '' : ' (se pagata)'}</label>
                     <input type="date" value={editForm.dataPagamento} onChange={e => setEditForm(f => ({...f, dataPagamento: e.target.value}))} />
                   </div>
                 )}
@@ -2410,10 +2450,16 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     if (raw === undefined) return;
     const n = parseInt(raw, 10);
     if (isNaN(n)) return;
+    riordinaGiro(t, n - 1);
+  }
+  // v78: sposta la tappa "t" alla posizione k (0 = prima) tra le tappe di oggi.
+  // Usata dal riquadro numerico del negozio e dalle frecce ▲▼ del riquadro Tappe.
+  const [ordinaTappe, setOrdinaTappe] = useState(false);
+  function riordinaGiro(t, kRaw) {
     const giro = tappeGiro.filter(x => tappaList.includes(x));
     const idx = giro.indexOf(t);
     if (idx < 0) return;
-    const k = Math.max(1, Math.min(giro.length, n)) - 1;
+    const k = Math.max(0, Math.min(giro.length - 1, kRaw));
     if (k === idx) return;
     const nuovoGiro = [...giro];
     nuovoGiro.splice(idx, 1);
@@ -2651,9 +2697,31 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
         <div className={`ls-tappe${giroCompleto ? ' completo' : ''}`}>
           <div className="ls-tappe-head">
             <span>{giroCompleto ? '✅ Tappe completate' : '📍 Tappe'}</span>
-            <span>{giroCompleto ? (totaleGiro > 0 ? `Totale ${formatEuro(totaleGiro)}` : '') : `${numFatte} di ${tappeGiro.length} fatte`}</span>
+            <span style={{display:'flex',alignItems:'center',gap:'8px'}}>
+              {giroCompleto ? (totaleGiro > 0 ? `Totale ${formatEuro(totaleGiro)}` : '') : `${numFatte} di ${tappeGiro.length} fatte`}
+              {!giroCompleto && tappeGiro.filter(x => tappaList.includes(x)).length > 1 && (
+                <button type="button" className={`ls-tappe-ordina${ordinaTappe ? ' attivo' : ''}`} onClick={() => setOrdinaTappe(v => !v)}>
+                  {ordinaTappe ? '✓ Fatto' : '↕️ Ordina'}
+                </button>
+              )}
+            </span>
           </div>
-          {!giroCompleto && (
+          {!giroCompleto && ordinaTappe && (() => {
+            // v78: riordino direttamente qui, con le frecce ▲▼ (l'ordine si salva anche in Impostazioni)
+            const giro = tappeGiro.filter(x => tappaList.includes(x));
+            return (
+              <div style={{marginTop:'6px'}}>
+                {giro.map((t, n) => (
+                  <div key={t} className="ls-ord-riga">
+                    <span className="ls-ord-nome">{n + 1}. {isServizio(t) ? '🏛️ ' : ''}{t}</span>
+                    <button type="button" className="ls-ord-btn" disabled={n === 0} onClick={() => riordinaGiro(t, n - 1)} aria-label={`Sposta ${t} prima`}>▲</button>
+                    <button type="button" className="ls-ord-btn" disabled={n === giro.length - 1} onClick={() => riordinaGiro(t, n + 1)} aria-label={`Sposta ${t} dopo`}>▼</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          {!giroCompleto && !ordinaTappe && (
             <div className="ls-chips">
               {tappeGiro.map((t, n) => (
                 <button key={t} type="button" onClick={() => vaiANegozio(t)} className={`ls-chip${tappaFatta(t) ? ' fatta' : ''}`}>{tappaFatta(t) ? '✓ ' : ''}{n + 1}. {isServizio(t) ? '🏛️ ' : ''}{t}</button>
@@ -2667,6 +2735,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
       )}
 
       <div className="ls-add">
+        <div className="ls-add-titolo">➕ Aggiungi alla lista</div>
         <AutocompleteInput
           className="ls-input"
           autoCapitalize="sentences"
@@ -2698,7 +2767,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
               onEnter={add}
             />
           </div>
-          <button className="btn primary ls-add-btn" onClick={add} aria-label="Aggiungi">＋</button>
+          <button className={`btn primary ls-add-btn${form.nome.trim() && (form.tappa || '').trim() ? ' pronto' : ''}`} onClick={add} aria-label="Aggiungi">＋</button>
         </div>
         {(() => {
           const sugg = negoziDelProdotto(form.nome);
