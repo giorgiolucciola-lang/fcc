@@ -442,7 +442,7 @@ input.ls-qta[type=text] { width: 78px; flex-shrink: 0; font-size: 16px; padding:
 const { useState, useEffect, useCallback, useRef } = React;
 
 // Versione dell'app mostrata accanto al titolo: aggiornala insieme a CACHE_VERSION in sw.js ad ogni deploy
-const APP_VERSION = "v78";
+const APP_VERSION = "v80";
 
 // ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
 // ⚠️ SOSTITUISCI questi valori con le tue credenziali Firebase
@@ -666,6 +666,13 @@ const DEFAULT_TAPPE = ['Supermercato', 'Fruttivendolo', 'Macelleria', 'Farmacia'
 // in Impostazioni → Negozi del giro spesa).
 const VALORE_BUONO_PASTO = 8;
 const DEFAULT_BUONI_MAX_GIORNO = 8;
+// v79: i buoni sono pezzi interi da 8 €: qualunque importo (scritto a mano, sommato o vecchio)
+// si riporta ai buoni interi che ci stanno nel totale (es. Cassa 15,74 → 1 buono da 8 €;
+// i 7,74 € restanti sono l'eccedenza pagata a parte, fuori Budget).
+function buoniInteri(euro, totale) {
+  const tetto = (totale > 0) ? Math.min(Number(euro) || 0, totale) : (Number(euro) || 0);
+  return Math.max(0, Math.floor((tetto + 0.001) / VALORE_BUONO_PASTO)) * VALORE_BUONO_PASTO;
+}
 // Nomi prodotto uniformi (v55): iPhone mette la maiuscola iniziale, il Mac no. Qui si
 // normalizza sempre: prima lettera maiuscola, il resto come scritto.
 // v68: "chiave" di un nome di negozio per riconoscere i doppioni: senza spazi in più, senza
@@ -704,6 +711,10 @@ function App() {
   const [tab, setTab] = useState('budget');
   const [syncing, setSyncing] = useState(false);
   const [data, setData] = useState(null);
+  // v80: dati di famiglia condivisi. docId = documento Firestore da usare: il proprio
+  // (users/{uid}) oppure quello di chi ci ha invitato (inviti/{email} → ownerUid).
+  const [docId, setDocId] = useState(null);
+  const [erroreDati, setErroreDati] = useState('');
   // Riquadro di conferma personalizzato (sostituisce window.confirm, che su iOS
   // in modalità app installata da Home Screen non viene mostrato). askConfirm
   // restituisce una Promise<boolean>, usabile con "await" come window.confirm.
@@ -731,9 +742,31 @@ function App() {
     return () => { unsub(); clearTimeout(timeout); };
   }, []);
 
+  // v80: all'accesso si controlla se questa email è stata invitata in una famiglia.
+  // L'ultimo documento usato resta ricordato sul telefono, così offline si apre subito.
   useEffect(() => {
-    if (!user) return;
-    const ref = db.collection('users').doc(user.uid);
+    if (!user) { setDocId(null); return; }
+    const chiaveLS = 'fcc-doc-' + user.uid;
+    let ricordato = null;
+    try { ricordato = localStorage.getItem(chiaveLS); } catch (e) {}
+    if (ricordato) setDocId(ricordato);
+    const email = (user.email || '').toLowerCase();
+    if (!email) { setDocId(user.uid); return; }
+    db.collection('inviti').doc(email).get({ source: 'server' }).then(snap => {
+      const owner = snap.exists && snap.data().ownerUid && snap.data().ownerUid !== user.uid ? snap.data().ownerUid : user.uid;
+      try { localStorage.setItem(chiaveLS, owner); } catch (e) {}
+      setDocId(owner);
+    }).catch(() => {
+      // offline o regole non ancora aggiornate: si usa l'ultimo documento noto (o il proprio)
+      if (!ricordato) setDocId(user.uid);
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !docId) return;
+    setData(null);
+    setErroreDati('');
+    const ref = db.collection('users').doc(docId);
     // includeMetadataChanges: true → il listener viene richiamato anche quando
     // cambia solo la "provenienza" dello snapshot (cache locale → server),
     // anche se i dati non sono cambiati. Serve per poter distinguere con
@@ -742,7 +775,7 @@ function App() {
     const unsub = ref.onSnapshot({ includeMetadataChanges: true }, snap => {
       if (snap.exists) {
         setData(snap.data());
-      } else if (!snap.metadata.fromCache) {
+      } else if (!snap.metadata.fromCache && docId === user.uid) {
         // Il server ha confermato che il documento non esiste davvero:
         // solo ora è sicuro creare i dati iniziali vuoti.
         const init = {
@@ -763,12 +796,17 @@ function App() {
       // else: lo snapshot "vuoto" arriva dalla cache locale, non dal server.
       // Non facciamo nulla e aspettiamo la conferma reale, per non rischiare
       // di sovrascrivere dati veri già presenti sul server.
-    }, () => {
-      // Errore di lettura (es. offline senza cache locale): non facciamo nulla,
-      // resta la schermata di caricamento invece di creare dati vuoti.
+    }, err => {
+      // Errore di lettura (es. offline senza cache locale): non si creano dati vuoti.
+      // v80: se il permesso è negato (dati condivisi non autorizzati) lo si dice.
+      if (err && err.code === 'permission-denied') {
+        setErroreDati(docId === user.uid
+          ? 'Accesso ai dati negato da Firebase. Controlla le regole di sicurezza.'
+          : 'Non riesco ad aprire i dati di famiglia: chi ti ha invitato deve ancora autorizzare la tua email (Impostazioni → Famiglia) oppure le regole di Firebase non sono aggiornate.');
+      }
     });
     return unsub;
-  }, [user]);
+  }, [user, docId]);
 
   async function saveData(newData) {
     if (!user) return;
@@ -776,7 +814,7 @@ function App() {
     setData(merged);
     setSyncing(true);
     try {
-      await db.collection('users').doc(user.uid).set(merged);
+      await db.collection('users').doc(docId).set(merged);
     } finally {
       setSyncing(false);
     }
@@ -791,7 +829,7 @@ function App() {
     if (!user || !Object.keys(updateObj).length) return;
     setSyncing(true);
     try {
-      await db.collection('users').doc(user.uid).update(updateObj);
+      await db.collection('users').doc(docId).update(updateObj);
     } finally {
       setSyncing(false);
     }
@@ -819,7 +857,7 @@ function App() {
     if (!user || !chiave) return;
     setSyncing(true);
     try {
-      await db.collection('users').doc(user.uid).update(new firebase.firestore.FieldPath(campo, chiave), valore);
+      await db.collection('users').doc(docId).update(new firebase.firestore.FieldPath(campo, chiave), valore);
     } finally {
       setSyncing(false);
     }
@@ -829,7 +867,7 @@ function App() {
   // sparita e poi ricomparsa (sull'iPhone gli ultimi "già presi" lampeggiavano).
   async function updateItem(field, oldItem, newItem) {
     if (!user) return;
-    const ref = db.collection('users').doc(user.uid);
+    const ref = db.collection('users').doc(docId);
     const batch = db.batch();
     batch.update(ref, { [field]: firebase.firestore.FieldValue.arrayRemove(oldItem) });
     batch.update(ref, { [field]: firebase.firestore.FieldValue.arrayUnion(senzaUndefined(newItem)) });
@@ -858,7 +896,7 @@ function App() {
     const unici = el.filter((t, i) => tenuto[chiaveNegozio(t)] === t && el.indexOf(t) === i);
     if (unici.length === el.length) return;
     const FV = firebase.firestore.FieldValue;
-    const ref = db.collection('users').doc(user.uid);
+    const ref = db.collection('users').doc(docId);
     const batch = db.batch();
     batch.update(ref, { tappeLista: unici });
     const verso = t => doppi[t] || t;
@@ -946,7 +984,7 @@ function App() {
   }
   async function spostaTuttiNegozio(da, a) {
     if (!user || !da || !a || da === a) return;
-    const ref = db.collection('users').doc(user.uid);
+    const ref = db.collection('users').doc(docId);
     const batch = db.batch();
     const prodotti = aggiungiSpostamentoNegozio(batch, ref, da, a);
     // ogni prodotto spostato "ricorda" il nuovo negozio come più recente
@@ -971,7 +1009,7 @@ function App() {
     const doppione = elenco.find(t => t !== vecchio && chiaveNegozio(t) === chiaveNegozio(nuovo));
     if (doppione) return `"${doppione}" esiste già: usa "Sposta tutti in" per unire i due negozi`;
     const FV = firebase.firestore.FieldValue;
-    const ref = db.collection('users').doc(user.uid);
+    const ref = db.collection('users').doc(docId);
     const batch = db.batch();
     if (elenco.includes(vecchio)) batch.update(ref, { tappeLista: elenco.map(t => t === vecchio ? nuovo : t) });
     // la categoria Budget resta quella di prima (anche se era quella proposta in automatico)
@@ -1011,7 +1049,27 @@ function App() {
   }
 
   function login() { auth.signInWithPopup(provider); }
-  function logout() { auth.signOut(); setData(null); }
+  function logout() { auth.signOut(); setData(null); setDocId(null); }
+  // v80: famiglia — aggiunge/toglie un'email che può usare questi dati (solo il titolare)
+  async function aggiungiMembro(emailRaw) {
+    const email = (emailRaw || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Scrivi un indirizzo email valido';
+    if (email === (user.email || '').toLowerCase()) return 'È la tua email: non serve aggiungerla';
+    if ((data.membriEmail || []).includes(email)) return 'Questa email è già in famiglia';
+    const batch = db.batch();
+    batch.set(db.collection('inviti').doc(email), { ownerUid: user.uid, ownerNome: user.displayName || user.email || '' });
+    batch.update(db.collection('users').doc(user.uid), { membriEmail: firebase.firestore.FieldValue.arrayUnion(email) });
+    setSyncing(true);
+    try { await batch.commit(); } catch (e) { return 'Salvataggio non riuscito: hai già aggiornato le regole di Firebase?'; } finally { setSyncing(false); }
+    return '';
+  }
+  async function togliMembro(email) {
+    const batch = db.batch();
+    batch.delete(db.collection('inviti').doc(email));
+    batch.update(db.collection('users').doc(user.uid), { membriEmail: firebase.firestore.FieldValue.arrayRemove(email) });
+    setSyncing(true);
+    try { await batch.commit(); } catch (e) {} finally { setSyncing(false); }
+  }
 
   if (loading) return <div style={{textAlign:'center',padding:'60px',color:'var(--text3)'}}>Caricamento...</div>;
 
@@ -1027,7 +1085,15 @@ function App() {
     </div>
   );
 
-  if (!data && user) return <div style={{textAlign:'center',padding:'60px',color:'var(--text3)'}}>Caricamento dati...</div>;
+  if (!data && user) return (
+    <div style={{textAlign:'center',padding:'60px 24px',color:'var(--text2)'}}>
+      {erroreDati ? <>
+        <div style={{fontSize:'16px',fontWeight:600,color:'var(--red)',marginBottom:'16px',lineHeight:1.5}}>{erroreDati}</div>
+        <div style={{fontSize:'14px',marginBottom:'16px'}}>Accesso fatto come {user.email}</div>
+        <button className="btn" onClick={logout}>Esci</button>
+      </> : 'Caricamento dati...'}
+    </div>
+  );
 
   const tabs = [
     { id: 'budget', label: '💰 Budget' },
@@ -1065,7 +1131,7 @@ function App() {
       {tab === 'scadenze' && <ScadenzeTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} askConfirm={askConfirm} />}
       {tab === 'spesa' && <SpesaTab data={data} saveData={saveData} addItems={addItems} removeItems={removeItems} updateItem={updateItem} applyUpdate={applyUpdate} aggiornaVoceMappa={aggiornaVoceMappa} spostaTuttiNegozio={spostaTuttiNegozio} rinominaNegozio={rinominaNegozio} askConfirm={askConfirm} />}
       {tab === 'report' && <ReportTab data={data} addItems={addItems} removeItems={removeItems} askConfirm={askConfirm} />}
-      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} applyUpdate={applyUpdate} rinominaNegozio={rinominaNegozio} />}
+      {tab === 'impostazioni' && <ImpostazioniTab data={data} saveData={saveData} applyUpdate={applyUpdate} rinominaNegozio={rinominaNegozio} titolare={docId === user.uid} emailUtente={user.email || ''} aggiungiMembro={aggiungiMembro} togliMembro={togliMembro} />}
 
       {confirmDialog && (
         <div className="confirm-overlay" onClick={() => risolviConfirm(false)}>
@@ -2496,7 +2562,10 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const d = cassaDrafts[t];
     if (d && d[campo] !== undefined) return d[campo];
     const c = cassaDi(t);
-    return c && c[campo] ? Number(c[campo]).toFixed(2).replace('.', ',') : '';
+    if (!c || !c[campo]) return '';
+    // v79: i buoni si vedono sempre come buoni interi da 8 €
+    const v = campo === 'buoni' ? buoniInteri(c.buoni, Number(c.totale) || 0) : Number(c[campo]);
+    return v ? v.toFixed(2).replace('.', ',') : '';
   }
   function setCassaDraft(t, campo, val) {
     setCassaDrafts(d => ({ ...d, [t]: { ...d[t], [campo]: val } }));
@@ -2522,6 +2591,8 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     }
     // v58: spesa pagata tutta con i buoni → se la cassa è vuota si riempie con lo stesso importo
     if (totale <= 0 && buoni > 0) totale = buoni;
+    // v79: sempre buoni interi, mai più del totale
+    buoni = buoniInteri(buoni, totale);
     const nuova = { id: vecchia ? vecchia.id : Date.now(), tappa: t, totale: Math.round(totale * 100) / 100, buoni: Math.round(buoni * 100) / 100, data: dataDi(t), ...(manuale && accettaBuoni(t) ? { buoniMan: true } : {}) };
     if (vecchia && vecchia.totale === nuova.totale && (vecchia.buoni || 0) === nuova.buoni && !!vecchia.buoniMan === !!nuova.buoniMan && dataCassa(vecchia) === nuova.data) return;
     if (vecchia && totale <= 0 && buoni <= 0) {
@@ -2597,7 +2668,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
   const numFatte = tappeGiro.filter(tappaFatta).length;
   const giroCompleto = tappeGiro.length > 0 && numFatte === tappeGiro.length;
   const totaleGiro = casse.reduce((a, c) => a + (Number(c.totale) || 0), 0);
-  const totaleBuoniGiro = casse.reduce((a, c) => a + (Number(c.buoni) || 0), 0);
+  const totaleBuoniGiro = casse.reduce((a, c) => a + buoniInteri(c.buoni, Number(c.totale) || 0), 0);
   const presi = lista.filter(i => i.checked);
   const casseValide = casse.filter(c => (Number(c.totale) || 0) > 0);
 
@@ -2611,7 +2682,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     // parte NON va nel Budget: resta come dato informativo sul movimento Buoni Pasto (extra)
     const righe = casseValide.map(c => {
       const dc = dataCassa(c);
-      const b = Math.min(Number(c.buoni) || 0, Number(c.totale) || 0);
+      const b = buoniInteri(c.buoni, Number(c.totale) || 0);
       const ecc = Math.round(((Number(c.totale) || 0) - b) * 100) / 100;
       const dove = b > 0
         ? `buoni ${formatEuro(b)}${ecc > 0 ? ` + a parte ${formatEuro(ecc)} (fuori Budget)` : ''}`
@@ -2627,7 +2698,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
     const nuoviBP = [];
     casseValide.forEach((c, idx) => {
       const giorno = dataCassa(c);
-      const buoni = Math.min(Number(c.buoni) || 0, Number(c.totale) || 0);
+      const buoni = buoniInteri(c.buoni, Number(c.totale) || 0);
       const netto = Math.round(((Number(c.totale) || 0) - buoni) * 100) / 100;
       if (buoni > 0) {
         nuoviBP.push({ id: base + 500 + idx, tipo: 'speso', desc: `Spesa – ${c.tappa}`, qty: Math.round(buoni / VALORE_BUONO_PASTO * 100) / 100, amount: Math.round(buoni * 100) / 100, date: giorno, ...(netto > 0 ? { extra: netto } : {}) });
@@ -2926,7 +2997,7 @@ function SpesaTab({ data, saveData, addItems, removeItems, updateItem, applyUpda
             {(() => {
               // v65: riepilogo buoni del negozio (solo informativo)
               const c = cassaDi(t);
-              const b = c ? (Number(c.buoni) || 0) : 0;
+              const b = c ? buoniInteri(c.buoni, Number(c.totale) || 0) : 0;
               if (b > 0) {
                 const diff = Math.round(((Number(c.totale) || 0) - b) * 100) / 100;
                 const n = Math.round(b / VALORE_BUONO_PASTO * 100) / 100;
@@ -3316,7 +3387,15 @@ function ReportTab({ data, addItems, removeItems, askConfirm }) {
 // Giorgio non li personalizza dalla tab Impostazioni.
 const DEFAULT_NOTIFICHE = { orario: '10:00', intervalloOre: '3', fasciaInizio: '08:00', fasciaFine: '20:00' };
 
-function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
+function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio, titolare, emailUtente, aggiungiMembro, togliMembro }) {
+  // v80: famiglia
+  const [nuovaEmail, setNuovaEmail] = useState('');
+  const [avvisoFam, setAvvisoFam] = useState('');
+  async function confermaMembro() {
+    const err = await aggiungiMembro(nuovaEmail);
+    if (err) { setAvvisoFam(err); return; }
+    setNuovaEmail(''); setAvvisoFam('✅ Aggiunta: ora può accedere con quel suo account Google');
+  }
   const [newCat, setNewCat] = useState('');
   const [newTappa, setNewTappa] = useState('');
   // v61: negozio di cui si sta correggendo il nome
@@ -3644,6 +3723,32 @@ function ImpostazioniTab({ data, saveData, applyUpdate, rinominaNegozio }) {
           {notifStato === 'ok' && <div style={{fontSize:'12px',color:'var(--green)',marginTop:'8px'}}>✅ Notifiche attivate su questo dispositivo.</div>}
           {notifStato === 'errore' && <div style={{fontSize:'12px',color:'var(--red)',marginTop:'8px'}}>{notifMsg}</div>}
         </div>
+      </div>
+
+      <div className="card" style={{marginTop:'8px'}}>
+        <div className="setting-label" style={{marginBottom:'8px'}}>👨‍👩‍👧 Famiglia (dati in comune)</div>
+        {titolare ? (<>
+          <div style={{fontSize:'14px',color:'var(--text)',marginBottom:'10px',lineHeight:'1.5'}}>
+            Scrivi l'email Google di chi deve usare FCC con te. Entrando con il suo account vedrà e modificherà gli stessi dati (lista della spesa, Budget, Scadenze, Buoni Pasto, Impostazioni), in tempo reale.
+          </div>
+          {(data.membriEmail || []).map(em => (
+            <div key={em} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'8px',padding:'8px 10px',marginBottom:'6px'}}>
+              <span style={{flex:1,minWidth:0,fontSize:'15px',overflowWrap:'anywhere'}}>{em}</span>
+              <button className="btn small danger" onClick={() => togliMembro(em)}>✕ Togli</button>
+            </div>
+          ))}
+          <div className="form-row" style={{marginTop:'8px'}}>
+            <input type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" placeholder="email@gmail.com" value={nuovaEmail}
+              onChange={e => { setNuovaEmail(e.target.value); setAvvisoFam(''); }}
+              onKeyDown={e => e.key === 'Enter' && confermaMembro()} style={{flex:1,fontSize:'16px'}} />
+            <button className="btn primary" onClick={confermaMembro}>Aggiungi</button>
+          </div>
+          {avvisoFam && <div style={{fontSize:'14px',fontWeight:600,color:avvisoFam.startsWith('✅') ? 'var(--green)' : 'var(--orange)'}}>{avvisoFam}</div>}
+        </>) : (
+          <div style={{fontSize:'14px',color:'var(--text)',lineHeight:'1.5'}}>
+            Stai usando i dati di famiglia condivisi (accesso come {emailUtente}). Ogni modifica la vedono anche gli altri.
+          </div>
+        )}
       </div>
 
       <div className="card" style={{marginTop:'8px'}}>
